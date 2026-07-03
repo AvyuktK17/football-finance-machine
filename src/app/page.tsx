@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CLUBS,
   getYear,
@@ -200,6 +200,10 @@ export default function Home() {
   const [saves, setSaves] = useState<SavedPlan[]>([]);
   const [saveName, setSaveName] = useState("");
   const [showSaves, setShowSaves] = useState(false);
+
+  // Mobile adaptations: `lg` is where the two-column transfers layout kicks in.
+  const isMobile = useMediaQuery("(max-width: 1023px)");
+  const [sheetOpen, setSheetOpen] = useState(false);
   // Max Bid controls
   const [mbWindow, setMbWindow] = useState<WindowId>("W1");
   const [mbWage, setMbWage] = useState(150_000);
@@ -700,12 +704,81 @@ export default function Home() {
   // STEP 2 — TRANSFER WINDOW BUILDER
   // =========================================================================
   if (step === "transfers") {
+    // Shared "Live financial impact" panel — rendered in the desktop right rail
+    // and, on mobile, inside the slide-up bottom sheet.
+    const impactPanel = (
+      <div className="space-y-4">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-neutral-500 mb-2">Live financial impact</p>
+          <div className="flex gap-1">
+            {plan.seasons.map((s) => {
+              const z = ZONE_STYLES[s.result.zone];
+              return (
+                <button key={s.seasonIndex} onClick={() => setSelectedSeason(s.seasonIndex)} className={`flex-1 rounded-md border px-2 py-1.5 text-center transition ${s.seasonIndex === selectedSeason ? "border-neutral-500 bg-neutral-900" : "border-neutral-800 bg-neutral-900/40 hover:border-neutral-600"}`}>
+                  <span className="block text-[9px] text-neutral-500">{s.label.slice(2)}</span>
+                  <span className={`block text-sm font-bold tabular-nums ${z.text}`}>{fmtPct(s.result.scr)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className={`rounded-xl border ${style.border} ${style.soft} p-4`}>
+          <p className="text-[10px] uppercase tracking-wide text-neutral-500">Projected SCR — {season.label}</p>
+          <p className={`text-5xl font-black tabular-nums ${style.text}`}>{fmtPct(after.scr)}</p>
+          <p className={`text-sm font-semibold mt-1 ${ZONE_STATUS[after.zone].tone}`}>{ZONE_STATUS[after.zone].label}</p>
+          <div className="relative mt-4 h-3 rounded bg-neutral-800 overflow-hidden">
+            <div className={`h-full ${style.bar}`} style={{ width: `${pct(after.scr)}%` }} />
+          </div>
+          <div className="flex justify-between text-[10px] text-neutral-500 mt-1">
+            <span>0%</span><span>limit {fmtPct(after.limit)}</span><span>130%</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <MiniStat label="Headroom" value={afterHeadroom >= 0 ? fmtM(afterHeadroom) : `−${fmtM(Math.abs(afterHeadroom))}`} tone={afterHeadroom >= 0 ? "text-emerald-400" : "text-red-400"} />
+          <MiniStat label="vs baseline" value={`${after.scr >= before.scr ? "+" : ""}${((after.scr - before.scr) * 100).toFixed(1)}pp`} />
+          <MiniStat label="Squad costs" value={fmtM(after.squadCosts)} />
+          <MiniStat label="Rev + trading" value={fmtM(after.denominator)} />
+        </div>
+
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-3">
+          <p className="text-[10px] uppercase tracking-wide text-neutral-500 mb-1">Squad market value</p>
+          <div className="flex items-baseline gap-2 tabular-nums text-sm">
+            <span className="text-neutral-300">{fmtM(mvNow)}</span>
+            <span className="text-neutral-600">→</span>
+            <span className={`font-bold ${mvEndOfPlan >= mvNow ? "text-emerald-400" : "text-red-400"}`}>{fmtM(mvEndOfPlan)}</span>
+            <span className="text-[10px] text-neutral-500">end of plan</span>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] uppercase tracking-wide text-neutral-500">PL multi-year allowance</span>
+            <span className={`text-[10px] font-semibold tabular-nums ${plan.buffer.exhausted ? "text-red-400" : plan.buffer.usedPct > 0.66 ? "text-amber-400" : "text-emerald-400"}`}>{(plan.buffer.used * 100).toFixed(1)}pp / 30pp</span>
+          </div>
+          <div className="h-1.5 rounded bg-neutral-800 overflow-hidden">
+            <div className={`h-full ${plan.buffer.exhausted ? "bg-red-600" : plan.buffer.usedPct > 0.66 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${Math.min(100, plan.buffer.usedPct * 100)}%` }} />
+          </div>
+        </div>
+
+        {after.denominatorWarning && (
+          <p className="text-xs text-red-400">Net player-trading losses have wiped out the revenue base — sell before you buy.</p>
+        )}
+
+        <button onClick={() => { setSheetOpen(false); setStep("compliance"); }} className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 px-5 py-3 text-sm font-bold text-white transition">
+          Review Compliance →
+        </button>
+        <p className="text-[10px] text-neutral-600 text-center">{totalMoves} move{totalMoves === 1 ? "" : "s"} planned</p>
+      </div>
+    );
+
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-100">
         {flowHeader}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-0">
           {/* -------- Builder -------- */}
-          <section className="p-4 sm:p-6 space-y-5 min-w-0">
+          <section className="p-4 sm:p-6 space-y-4 sm:space-y-5 min-w-0">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-bold">Build your transfer window</h2>
@@ -720,7 +793,21 @@ export default function Home() {
             <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 space-y-4">
               <div>
                 <p className="text-xs uppercase tracking-wide text-neutral-500 mb-2">Window being planned</p>
-                <div className="rounded-lg bg-neutral-900 p-1 border border-neutral-800 space-y-1">
+                {/* Mobile: compact horizontal segmented control (all six windows) */}
+                <div className="sm:hidden -mx-1 overflow-x-auto pb-0.5">
+                  <div className="flex gap-1 px-1 min-w-max">
+                    {WINDOWS.map((w) => {
+                      const n = incomings.filter((i) => i.window === w.id).length + sales.filter((s) => s.window === w.id).length + loansOut.filter((l) => l.window === w.id).length + loansIn.filter((l) => l.window === w.id).length;
+                      return (
+                        <button key={w.id} onClick={() => setActiveWindow(w.id)} className={`shrink-0 rounded-md border px-3 py-1.5 text-xs font-medium transition ${activeWindow === w.id ? "bg-neutral-700 text-white border-neutral-600 shadow" : "bg-neutral-900 text-neutral-400 border-neutral-800"}`}>
+                          {w.short}{n > 0 && <span className="ml-1 text-[10px] text-emerald-400">{n}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {/* Desktop: 3×2 season / window matrix */}
+                <div className="hidden sm:block rounded-lg bg-neutral-900 p-1 border border-neutral-800 space-y-1">
                   {[0, 1, 2].map((r) => (
                     <div key={r} className="grid grid-cols-[44px_1fr_1fr] gap-1 items-stretch">
                       <span className="flex items-center justify-center text-[9px] uppercase tracking-wide text-neutral-600">{SEASON_LABELS[r].slice(2)}</span>
@@ -791,13 +878,12 @@ export default function Home() {
             </div>
 
             {/* Signings */}
-            <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-neutral-300">
-                  Signings · {windowShort(activeWindow)}{incomingsInWindow.length > 0 && <span className="text-neutral-500"> ({incomingsInWindow.length})</span>}
-                </h3>
-                <button onClick={() => addIncoming()} className="text-xs rounded bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1 text-white">+ Add signing</button>
-              </div>
+            <CollapsibleCard
+              collapsible={isMobile}
+              count={incomingsInWindow.length}
+              title={<>Signings · {windowShort(activeWindow)}</>}
+              action={<button onClick={() => addIncoming()} className="shrink-0 text-xs rounded bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1 text-white">+ Add signing</button>}
+            >
               {incomingsInWindow.length === 0 && <p className="text-xs text-neutral-600">No {activeWindowLabel} signings yet. Add one, or sell/loan players below.</p>}
               <div className="space-y-3">
                 {incomingsInWindow.map((inc) => (
@@ -834,11 +920,10 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-            </div>
+            </CollapsibleCard>
 
             {/* Sales */}
-            <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4">
-              <h3 className="text-sm font-semibold text-neutral-300 mb-3">Sales {sales.length > 0 && <span className="text-neutral-500">({sales.length})</span>}</h3>
+            <CollapsibleCard collapsible={isMobile} count={sales.length} title="Sales">
               {sales.length === 0 ? (
                 <p className="text-xs text-neutral-600">Open the squad below and hit “Sell” on any player → it lands in the active window.</p>
               ) : (
@@ -862,11 +947,10 @@ export default function Home() {
                   })}
                 </div>
               )}
-            </div>
+            </CollapsibleCard>
 
             {/* Loans out */}
-            <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4">
-              <h3 className="text-sm font-semibold text-neutral-300 mb-3">Loans out {loansOut.length > 0 && <span className="text-neutral-500">({loansOut.length})</span>}</h3>
+            <CollapsibleCard collapsible={isMobile} count={loansOut.length} title="Loans out">
               {loansOut.length === 0 ? (
                 <p className="text-xs text-neutral-600">Open the squad below and hit “Loan” on any player → he leaves on loan in the active window.</p>
               ) : (
@@ -915,14 +999,15 @@ export default function Home() {
                   })}
                 </div>
               )}
-            </div>
+            </CollapsibleCard>
 
             {/* Loans in */}
-            <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-neutral-300">Loans in {loansIn.length > 0 && <span className="text-neutral-500">({loansIn.length})</span>}</h3>
-                <button onClick={addLoanIn} className="text-xs rounded bg-sky-700 hover:bg-sky-600 px-2.5 py-1 text-white">+ Loan a player in</button>
-              </div>
+            <CollapsibleCard
+              collapsible={isMobile}
+              count={loansIn.length}
+              title="Loans in"
+              action={<button onClick={addLoanIn} className="shrink-0 text-xs rounded bg-sky-700 hover:bg-sky-600 px-2.5 py-1 text-white">+ Loan a player in</button>}
+            >
               {loansIn.length === 0 && <p className="text-xs text-neutral-600">Borrow a player: pay a loan fee (a squad cost) and your share of his wage.</p>}
               <div className="space-y-3">
                 {loansIn.map((l) => (
@@ -968,7 +1053,7 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-            </div>
+            </CollapsibleCard>
 
             {/* Progressive disclosure — squad table */}
             <div className="rounded-xl border border-neutral-800 bg-neutral-900/50">
@@ -1063,76 +1148,55 @@ export default function Home() {
                 </div>
               )}
             </div>
+            {/* Spacer so the last controls clear the fixed mobile bottom bar. */}
+            <div className="h-20 lg:hidden" aria-hidden />
           </section>
 
-          {/* -------- Live impact summary (sticky) -------- */}
-          <aside className="border-t lg:border-t-0 lg:border-l border-neutral-800 p-4 sm:p-6">
-            <div className="lg:sticky lg:top-24 space-y-4">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-neutral-500 mb-2">Live financial impact</p>
-                <div className="flex gap-1">
-                  {plan.seasons.map((s) => {
-                    const z = ZONE_STYLES[s.result.zone];
-                    return (
-                      <button key={s.seasonIndex} onClick={() => setSelectedSeason(s.seasonIndex)} className={`flex-1 rounded-md border px-2 py-1.5 text-center transition ${s.seasonIndex === selectedSeason ? "border-neutral-500 bg-neutral-900" : "border-neutral-800 bg-neutral-900/40 hover:border-neutral-600"}`}>
-                        <span className="block text-[9px] text-neutral-500">{s.label.slice(2)}</span>
-                        <span className={`block text-sm font-bold tabular-nums ${z.text}`}>{fmtPct(s.result.scr)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className={`rounded-xl border ${style.border} ${style.soft} p-4`}>
-                <p className="text-[10px] uppercase tracking-wide text-neutral-500">Projected SCR — {season.label}</p>
-                <p className={`text-5xl font-black tabular-nums ${style.text}`}>{fmtPct(after.scr)}</p>
-                <p className={`text-sm font-semibold mt-1 ${ZONE_STATUS[after.zone].tone}`}>{ZONE_STATUS[after.zone].label}</p>
-                <div className="relative mt-4 h-3 rounded bg-neutral-800 overflow-hidden">
-                  <div className={`h-full ${style.bar}`} style={{ width: `${pct(after.scr)}%` }} />
-                </div>
-                <div className="flex justify-between text-[10px] text-neutral-500 mt-1">
-                  <span>0%</span><span>limit {fmtPct(after.limit)}</span><span>130%</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <MiniStat label="Headroom" value={afterHeadroom >= 0 ? fmtM(afterHeadroom) : `−${fmtM(Math.abs(afterHeadroom))}`} tone={afterHeadroom >= 0 ? "text-emerald-400" : "text-red-400"} />
-                <MiniStat label="vs baseline" value={`${after.scr >= before.scr ? "+" : ""}${((after.scr - before.scr) * 100).toFixed(1)}pp`} />
-                <MiniStat label="Squad costs" value={fmtM(after.squadCosts)} />
-                <MiniStat label="Rev + trading" value={fmtM(after.denominator)} />
-              </div>
-
-              <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-3">
-                <p className="text-[10px] uppercase tracking-wide text-neutral-500 mb-1">Squad market value</p>
-                <div className="flex items-baseline gap-2 tabular-nums text-sm">
-                  <span className="text-neutral-300">{fmtM(mvNow)}</span>
-                  <span className="text-neutral-600">→</span>
-                  <span className={`font-bold ${mvEndOfPlan >= mvNow ? "text-emerald-400" : "text-red-400"}`}>{fmtM(mvEndOfPlan)}</span>
-                  <span className="text-[10px] text-neutral-500">end of plan</span>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-3">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] uppercase tracking-wide text-neutral-500">PL multi-year allowance</span>
-                  <span className={`text-[10px] font-semibold tabular-nums ${plan.buffer.exhausted ? "text-red-400" : plan.buffer.usedPct > 0.66 ? "text-amber-400" : "text-emerald-400"}`}>{(plan.buffer.used * 100).toFixed(1)}pp / 30pp</span>
-                </div>
-                <div className="h-1.5 rounded bg-neutral-800 overflow-hidden">
-                  <div className={`h-full ${plan.buffer.exhausted ? "bg-red-600" : plan.buffer.usedPct > 0.66 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${Math.min(100, plan.buffer.usedPct * 100)}%` }} />
-                </div>
-              </div>
-
-              {after.denominatorWarning && (
-                <p className="text-xs text-red-400">Net player-trading losses have wiped out the revenue base — sell before you buy.</p>
-              )}
-
-              <button onClick={() => setStep("compliance")} className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 px-5 py-3 text-sm font-bold text-white transition">
-                Review Compliance →
-              </button>
-              <p className="text-[10px] text-neutral-600 text-center">{totalMoves} move{totalMoves === 1 ? "" : "s"} planned</p>
+          {/* -------- Live impact summary — desktop right rail -------- */}
+          <aside className="hidden lg:block lg:border-l border-neutral-800 p-6">
+            <div className="lg:sticky lg:top-24">
+              {impactPanel}
             </div>
           </aside>
         </div>
+
+        {/* -------- Mobile: sticky bottom SCR bar + slide-up sheet -------- */}
+        {isMobile && (
+          <>
+            {/* Persistent micro-meter. Tap the SCR to open the full sheet. */}
+            <div className="lg:hidden fixed inset-x-0 bottom-0 z-40 border-t border-neutral-800 bg-neutral-950/95 backdrop-blur pb-safe">
+              <div className="flex items-stretch gap-2 px-3 py-2">
+                <button onClick={() => setSheetOpen(true)} className="flex flex-1 items-center gap-2 min-w-0 text-left" aria-label="Open live financial impact">
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${style.dot}`} />
+                  <span className="min-w-0">
+                    <span className="block text-[9px] uppercase tracking-wide text-neutral-500 leading-none mb-0.5">SCR · {season.label.slice(2)}</span>
+                    <span className="flex items-baseline gap-1.5">
+                      <span className={`text-sm font-bold tabular-nums ${style.text}`}>{fmtPct(after.scr)}</span>
+                      <span className={`text-[11px] tabular-nums ${afterHeadroom >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {afterHeadroom >= 0 ? `${fmtM(afterHeadroom)} clear` : `+${fmtM(Math.abs(afterHeadroom))} over`}
+                      </span>
+                    </span>
+                  </span>
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="ml-1 h-4 w-4 shrink-0 text-neutral-500"><path d="M10 6l5 6H5z" /></svg>
+                </button>
+                <button onClick={() => setStep("compliance")} className="shrink-0 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 text-sm font-bold text-white transition">
+                  Review →
+                </button>
+              </div>
+            </div>
+
+            {/* Slide-up sheet with the full impact grid. */}
+            {sheetOpen && (
+              <div className="lg:hidden fixed inset-0 z-50" role="dialog" aria-modal="true">
+                <div className="absolute inset-0 bg-black/60 animate-[fadeIn_150ms_ease-out]" onClick={() => setSheetOpen(false)} />
+                <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-neutral-700 bg-neutral-950 px-4 pt-2 pb-safe-lg shadow-2xl animate-[slideUp_200ms_ease-out]">
+                  <button onClick={() => setSheetOpen(false)} className="mx-auto mb-3 mt-1 block h-1.5 w-10 rounded-full bg-neutral-700" aria-label="Close financial impact" />
+                  {impactPanel}
+                </div>
+              </div>
+            )}
+          </>
+        )}
         {showLineups && (
           <LineupBuilder roster={lineupRoster} initial={lineup} clubName={club.shortName} finance={lineupFinance} onSave={(l) => setLineup(l)} onClose={() => setShowLineups(false)} />
         )}
@@ -1396,6 +1460,80 @@ function Stepper({ current, onNavigate, reached }: { current: Step; onNavigate: 
 }
 
 const fmtDeltaM = (x: number) => `${x >= 0 ? "+" : "−"}£${Math.abs(Math.round(x))}m`;
+
+/**
+ * Tracks whether the viewport is below a breakpoint (default: Tailwind `lg`).
+ * SSR-safe: returns `false` on the server AND on the first client render, so
+ * hydration matches; it flips to the real value after mount and on resize.
+ */
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
+    onChange();
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, [query]);
+  return matches;
+}
+
+/**
+ * Section card that behaves like a normal card on desktop but, when
+ * `collapsible` is true (mobile), collapses to a single header row while the
+ * section is empty. It auto-expands as soon as `count` > 0 and can be toggled
+ * open manually to reveal the "how to add" hint.
+ */
+function CollapsibleCard({
+  collapsible,
+  title,
+  count,
+  action,
+  children,
+}: {
+  collapsible: boolean;
+  title: ReactNode;
+  count: number;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const expanded = !collapsible || open || count > 0;
+  const header = (
+    <h3 className="text-sm font-semibold text-neutral-300 min-w-0 truncate">
+      {title}
+      {count > 0 && <span className="text-neutral-500 font-normal"> ({count})</span>}
+      {collapsible && count === 0 && <span className="text-neutral-600 font-normal"> (0)</span>}
+    </h3>
+  );
+  return (
+    <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4">
+      <div className={`flex items-center justify-between gap-2 ${expanded ? "mb-3" : ""}`}>
+        {collapsible ? (
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="flex items-center gap-2 min-w-0 flex-1 text-left"
+            aria-expanded={expanded}
+          >
+            <svg
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className={`h-3.5 w-3.5 shrink-0 text-neutral-500 transition-transform ${expanded ? "rotate-90" : ""}`}
+            >
+              <path d="M7 5l6 5-6 5V5z" />
+            </svg>
+            {header}
+          </button>
+        ) : (
+          header
+        )}
+        {action}
+      </div>
+      {expanded && children}
+    </div>
+  );
+}
 
 function MiniStat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
