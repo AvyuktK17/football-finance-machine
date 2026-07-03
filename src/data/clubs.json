@@ -1,0 +1,112 @@
+{
+  "_meta": {
+    "season": "2026/27",
+    "currency": "GBP",
+    "units": "Club-level financials (estimatedRevenue, annualWages, annualAmortisation, agentFees) are in £ millions. Player weeklyWage is in absolute £. Player remainingBookValue and marketValue are in £ millions.",
+    "disclaimer": "Illustrative 2026 benchmark estimates for simulation only. Not official club accounts."
+  },
+  "clubs": [
+    {
+      "id": "man-city",
+      "name": "Manchester City",
+      "shortName": "Man City",
+      "estimatedRevenue": 745,
+      "annualWages": 420,
+      "annualAmortisation": 165,
+      "agentFees": 30,
+      "isPlayingInEurope": true,
+      "players": [
+        { "name": "Erling Haaland", "weeklyWage": 525000, "remainingBookValue": 30, "marketValue": 180, "isAcademy": false },
+        { "name": "Rodri", "weeklyWage": 300000, "remainingBookValue": 22, "marketValue": 100, "isAcademy": false },
+        { "name": "Phil Foden", "weeklyWage": 225000, "remainingBookValue": 0, "marketValue": 130, "isAcademy": true },
+        { "name": "Josko Gvardiol", "weeklyWage": 160000, "remainingBookValue": 55, "marketValue": 75, "isAcademy": false },
+        { "name": "Savinho", "weeklyWage": 90000, "remainingBookValue": 25, "marketValue": 55, "isAcademy": false }
+      ]
+    },
+    {
+      "id": "arsenal",
+      "name": "Arsenal",
+      "shortName": "Arsenal",
+      "estimatedRevenue": 635,
+      "annualWages": 345,
+      "annualAmortisation": 190,
+      "agentFees": 26,
+      "isPlayingInEurope": true,
+      "players": [
+        { "name": "Bukayo Saka", "weeklyWage": 300000, "remainingBookValue": 0, "marketValue": 150, "isAcademy": true },
+        { "name": "Declan Rice", "weeklyWage": 240000, "remainingBookValue": 70, "marketValue": 110, "isAcademy": false },
+        { "name": "Martin Odegaard", "weeklyWage": 240000, "remainingBookValue": 20, "marketValue": 90, "isAcademy": false },
+        { "name": "William Saliba", "weeklyWage": 190000, "remainingBookValue": 18, "marketValue": 80, "isAcademy": false },
+        { "name": "Kai Havertz", "weeklyWage": 280000, "remainingBookValue": 45, "marketValue": 55, "isAcademy": false }
+      ]
+    },
+    {
+      "id": "liverpool",
+      "name": "Liverpool",
+      "shortName": "Liverpool",
+      "estimatedRevenue": 655,
+      "annualWages": 375,
+      "annualAmortisation": 150,
+      "agentFees": 25,
+      "isPlayingInEurope": true,
+      "players": [
+        { "name": "Mohamed Salah", "weeklyWage": 400000, "remainingBookValue": 0, "marketValue": 55, "isAcademy": false },
+        { "name": "Virgil van Dijk", "weeklyWage": 350000, "remainingBookValue": 0, "marketValue": 22, "isAcademy": false },
+        { "name": "Florian Wirtz", "weeklyWage": 250000, "remainingBookValue": 100, "marketValue": 120, "isAcademy": false },
+        { "name": "Alexis Mac Allister", "weeklyWage": 150000, "remainingBookValue": 35, "marketValue": 75, "isAcademy": false },
+        { "name": "Trent Alexander-Arnold", "weeklyWage": 180000, "remainingBookValue": 0, "marketValue": 70, "isAcademy": true }
+      ]
+    },
+    {
+      "id": "chelsea",
+      "name": "Chelsea",
+      "shortName": "Chelsea",
+      "estimatedRevenue": 495,
+      "annualWages": 340,
+      "annualAmortisation": 275,
+      "agentFees": 42,
+      "isPlayingInEurope": true,
+      "players": [
+        { "name": "Cole Palmer", "weeklyWage": 250000, "remainingBookValue": 30, "marketValue": 130, "isAcademy": false },
+        { "name": "Enzo Fernandez", "weeklyWage": 200000, "remainingBookValue": 70, "marketValue": 80, "isAcademy": false },
+        { "name": "Moises Caicedo", "weeklyWage": 150000, "remainingBookValue": 90, "marketValue": 100, "isAcademy": false },
+        { "name": "Nicolas Jackson", "weeklyWage": 110000, "remainingBookValue": 40, "marketValue": 55, "isAcademy": false },
+        { "name": "Levi Colwill", "weeklyWage": 100000, "remainingBookValue": 0, "marketValue": 55, "isAcademy": true }
+      ]
+    },
+    {
+      "id": "man-utd",
+      "name": "Manchester United",
+      "shortName": "Man United",
+      "estimatedRevenue": 670,
+      "annualWages": 355,
+      "annualAmortisation": 205,
+      "agentFees": 30,
+      "isPlayingInEurope": true,
+      "players": [
+        { "name": "Bruno Fernandes", "weeklyWage": 300000, "remainingBookValue": 15, "marketValue": 60, "isAcademy": false },
+        { "name": "Rasmus Hojlund", "weeklyWage": 85000, "remainingBookValue": 55, "marketValue": 45, "isAcademy": false },
+        { "name": "Matthijs de Ligt", "weeklyWage": 180000, "remainingBookValue": 35, "marketValue": 45, "isAcademy": false },
+        { "name": "Kobbie Mainoo", "weeklyWage": 80000, "remainingBookValue": 0, "marketValue": 80, "isAcademy": true },
+        { "name": "Alejandro Garnacho", "weeklyWage": 90000, "remainingBookValue": 0, "marketValue": 55, "isAcademy": true }
+      ]
+    },
+    {
+      "id": "tottenham",
+      "name": "Tottenham Hotspur",
+      "shortName": "Tottenham",
+      "estimatedRevenue": 540,
+      "annualWages": 255,
+      "annualAmortisation": 135,
+      "agentFees": 20,
+      "isPlayingInEurope": true,
+      "players": [
+        { "name": "Son Heung-min", "weeklyWage": 190000, "remainingBookValue": 0, "marketValue": 20, "isAcademy": false },
+        { "name": "James Maddison", "weeklyWage": 170000, "remainingBookValue": 25, "marketValue": 55, "isAcademy": false },
+        { "name": "Cristian Romero", "weeklyWage": 130000, "remainingBookValue": 20, "marketValue": 65, "isAcademy": false },
+        { "name": "Dejan Kulusevski", "weeklyWage": 110000, "remainingBookValue": 30, "marketValue": 55, "isAcademy": false },
+        { "name": "Micky van de Ven", "weeklyWage": 90000, "remainingBookValue": 28, "marketValue": 65, "isAcademy": false }
+      ]
+    }
+  ]
+}
