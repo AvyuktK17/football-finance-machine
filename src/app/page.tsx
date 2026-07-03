@@ -38,6 +38,7 @@ import {
 } from "@/utils/forwardPlanner";
 import { solveClearingHouse, type ClearingResult, type ClearingSolution } from "@/utils/clearingHouse";
 import LineupBuilder, { type RosterEntry } from "@/components/LineupBuilder";
+import Onboarding from "@/components/Onboarding";
 import type { Lineup } from "@/utils/lineups";
 
 // ---------------------------------------------------------------------------
@@ -584,6 +585,7 @@ export default function Home() {
   if (step === "club") {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-100">
+        <Onboarding />
         <div className="max-w-6xl mx-auto px-6 py-14 sm:py-20">
           <div className="text-center mb-12">
             <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500 mb-3">Squad Cost Ratio simulator · 2026/27</p>
@@ -643,7 +645,7 @@ export default function Home() {
 
   // Header shared by steps 2–4
   const flowHeader = (
-    <header className="border-b border-neutral-800 px-4 sm:px-6 py-3 sticky top-0 z-20 bg-neutral-950/90 backdrop-blur">
+    <><Onboarding /><header className="border-b border-neutral-800 px-4 sm:px-6 py-3 sticky top-0 z-20 bg-neutral-950/90 backdrop-blur">
       <div className="flex flex-wrap items-center gap-3">
         <button onClick={startOver} className="text-sm font-bold tracking-tight hover:text-emerald-400 transition mr-1">
           Football Finance Machine
@@ -691,7 +693,7 @@ export default function Home() {
           </div>
         </div>
       )}
-    </header>
+    </header></>
   );
 
   // =========================================================================
