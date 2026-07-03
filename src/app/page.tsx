@@ -1391,9 +1391,14 @@ export default function Home() {
       <div className="min-h-screen bg-neutral-950 text-neutral-100">
         {flowHeader}
         <main className="max-w-5xl mx-auto p-4 sm:p-8 space-y-6">
-          <div>
-            <h2 className="text-lg font-bold">Compliance result</h2>
-            <p className="text-xs text-neutral-500 mt-0.5">Your plan for {club.name}, evaluated against the {after.track === "UEFA" ? "UEFA 70%" : "Premier League 85%/115%"} track.</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold">Compliance result</h2>
+              <p className="text-xs text-neutral-500 mt-0.5">Your plan for {club.name}, evaluated against the {after.track === "UEFA" ? "UEFA 70%" : "Premier League 85%/115%"} track.</p>
+            </div>
+            <button onClick={() => setStep("lineup")} className="shrink-0 rounded-lg px-4 py-2 text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition">
+              Build lineup →
+            </button>
           </div>
 
           {/* Season selector */}
