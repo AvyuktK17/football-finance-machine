@@ -100,18 +100,31 @@ console.log("— backups (substitute hierarchy)");
   assert(l.slots[0] === "gk2" && !l.subs[0].includes("gk2"), "promoted backup becomes starter and leaves the backup list");
   assert(l.subs[0].join(",") === "gk3", "the other backup stays put");
 
-  // A key is never in two places: re-add gk3 as a backup to another slot.
+  // Multi-slot backups: gk3 can back up ANOTHER slot while staying at slot 0.
   l = placeInSlot(l, 9, "striker");
   l = addBackup(l, 9, "gk3");
-  assert(!l.subs[0].includes("gk3") && l.subs[9].includes("gk3"), "adding a backup elsewhere removes the old registration");
+  assert(l.subs[0].includes("gk3") && l.subs[9].includes("gk3"), "a player can be a backup in multiple slots");
 
-  // addBackup on a current starter demotes him off the pitch.
+  // A starter may ALSO be a backup elsewhere (gk2 starts slot 0, backs up 9).
   l = addBackup(l, 9, "gk2");
-  assert(l.slots[0] === null && l.subs[9].includes("gk2"), "a starter added as a backup vacates his slot");
+  assert(l.slots[0] === "gk2" && l.subs[9].includes("gk2"), "a starter can back up another position without leaving his slot");
 
+  // …but never his own slot.
+  l = addBackup(l, 0, "gk2");
+  assert(!l.subs[0].includes("gk2"), "a starter cannot back up his own slot");
+
+  // No duplicates within one list.
+  l = addBackup(l, 9, "gk3");
+  assert(l.subs[9].filter((k) => k === "gk3").length === 1, "no duplicate within a single backup list");
+
+  // Promoting to starter only clears him from THAT slot's backups.
+  l = placeInSlot(l, 9, "gk3");
+  assert(l.slots[9] === "gk3" && !l.subs[9].includes("gk3"), "promotion scrubs him from that slot's backup list");
+  assert(l.subs[0].includes("gk3"), "…but he keeps his backup registrations elsewhere");
+
+  l = removeMember(l, 0, "gk3");
+  assert(!l.subs[0].includes("gk3"), "removeMember drops a backup");
   l = removeMember(l, 9, "gk3");
-  assert(!l.subs[9].includes("gk3"), "removeMember drops a backup");
-  l = removeMember(l, 9, "striker");
   assert(l.slots[9] === null, "removeMember clears a starter");
 
   const keys = assignedKeys(l);
@@ -137,12 +150,18 @@ console.log("— sanitize backups");
 {
   const valid = new Set(["a", "b", "c", "d"]);
   const s = sanitizeLineup(
-    { formation: "433", slots: ["a", null, "b"], subs: [["c", "ghost", "a"], [], ["b", "d"]] },
+    { formation: "433", slots: ["a", null, "b"], subs: [["c", "ghost", "a"], ["a"], ["b", "d", "d"]] },
     valid,
   )!;
-  assert(s.subs[0].join(",") === "c", "unknown + already-used keys dropped from backups (a is a starter)");
-  assert(s.subs[2].join(",") === "d", "duplicate starter b dropped from its own backup list, d kept");
+  assert(s.subs[0].join(",") === "c", "unknown keys + own-slot starter dropped from backups");
+  assert(s.subs[1].join(",") === "a", "a starter may back up ANOTHER slot");
+  assert(s.subs[2].join(",") === "d", "a slot's own starter + in-list duplicates dropped from its backups");
   assert(s.subs.length === 11, "backups padded to formation size");
+  const multi = sanitizeLineup(
+    { formation: "433", slots: [null], subs: [["c"], ["c"], ["c"]] },
+    valid,
+  )!;
+  assert(multi.subs[0].join(",") === "c" && multi.subs[1].join(",") === "c" && multi.subs[2].join(",") === "c", "same key allowed across multiple backup lists");
   const legacy = sanitizeLineup({ formation: "433", slots: ["a"] }, valid)!;
   assert(legacy.subs.every((x) => x.length === 0), "legacy payload without subs yields empty backup lists");
 }

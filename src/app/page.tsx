@@ -26,6 +26,7 @@ import {
   isJanuaryWindow,
   normalizeEuropeTier,
   squadMarketValueAfter,
+  buyExecutes,
   type EuropeTier,
   type WindowId,
   type PlannedSigning,
@@ -211,6 +212,9 @@ export default function Home() {
 
   // Zone-crossing feedback (toast + meter pulse).
   const [zoneToast, setZoneToast] = useState<{ zone: Zone; improved: boolean } | null>(null);
+
+  // Deal sheet shown before moving on to compliance.
+  const [showDealSheet, setShowDealSheet] = useState(false);
 
   // Mobile adaptations: `lg` is where the two-column transfers layout kicks in.
   const isMobile = useMediaQuery("(max-width: 1023px)");
@@ -597,6 +601,33 @@ export default function Home() {
   const activeWindowLabel = WINDOWS.find((w) => w.id === activeWindow)!.label;
   const incomingsInWindow = incomings.filter((i) => i.window === activeWindow);
 
+  // ---- Deal sheet: every dealing, transfer-fee basis, grouped by window -----
+  interface DealRow { window: WindowId; text: string; amount: number; dir: "out" | "in" }
+  const dealRows: DealRow[] = useMemo(() => {
+    const rows: DealRow[] = [];
+    for (const i of incomings) rows.push({ window: i.window, text: `${i.label || "Signing"}${i.isFree ? " (free transfer)" : ""}`, amount: i.isFree ? 0 : i.fee, dir: "out" });
+    for (const l of loansIn) {
+      rows.push({ window: l.window, text: `${l.label || "Loan-in"} — loan fee`, amount: l.loanFee, dir: "out" });
+      if (buyExecutes(rowBuyClause(l))) rows.push({ window: l.window, text: `${l.label || "Loan-in"} — buy clause${l.buyType === "option" ? " (assumed)" : ""}`, amount: l.buyPrice, dir: "out" });
+    }
+    for (const s of sales) rows.push({ window: s.window, text: s.name, amount: s.saleFee, dir: "in" });
+    for (const l of loansOut) {
+      rows.push({ window: l.window, text: `${l.name} — loan fee`, amount: l.loanFee, dir: "in" });
+      if (buyExecutes(rowBuyClause(l))) rows.push({ window: l.window, text: `${l.name} — buy clause${l.buyType === "option" ? " (assumed)" : ""}`, amount: l.buyPrice, dir: "in" });
+    }
+    return rows;
+  }, [incomings, sales, loansOut, loansIn]);
+  const dealSpend = dealRows.filter((r) => r.dir === "out").reduce((a, r) => a + r.amount, 0);
+  const dealIncome = dealRows.filter((r) => r.dir === "in").reduce((a, r) => a + r.amount, 0);
+  const netSpend = dealSpend - dealIncome;
+
+  /** "Review Compliance" — show the deal sheet first when there are dealings. */
+  function reviewCompliance() {
+    setSheetOpen(false);
+    if (totalMoves > 0) setShowDealSheet(true);
+    else setStep("compliance");
+  }
+
   // Per-club baseline SCR (default year, no plan) for the club-selection screen.
   const leagueRows = useMemo(
     () =>
@@ -902,7 +933,7 @@ export default function Home() {
           <p className="text-xs text-red-400">Net player-trading losses have wiped out the revenue base — sell before you buy.</p>
         )}
 
-        <button onClick={() => { setSheetOpen(false); setStep("compliance"); }} className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 px-5 py-3 text-sm font-bold text-white transition">
+        <button onClick={reviewCompliance} className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 px-5 py-3 text-sm font-bold text-white transition">
           Review Compliance →
         </button>
         <p className="text-[10px] text-neutral-600 text-center">{totalMoves} move{totalMoves === 1 ? "" : "s"} planned</p>
@@ -1318,6 +1349,54 @@ export default function Home() {
           </aside>
         </div>
 
+        {/* -------- Deal sheet: window dealings + net spend -------- */}
+        {showDealSheet && (
+          <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true" onClick={() => setShowDealSheet(false)}>
+            <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl border border-neutral-700 bg-neutral-950 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="relative p-5 border-b border-neutral-800">
+                <div className="absolute inset-x-0 top-0 h-1 rounded-t-2xl" style={{ background: `linear-gradient(90deg, ${accent.primary}, transparent 85%)` }} aria-hidden />
+                <h3 className="text-base font-bold">Deal sheet — {club.shortName}</h3>
+                <p className="text-xs text-neutral-500 mt-0.5">{totalMoves} dealing{totalMoves === 1 ? "" : "s"} across your plan, on a transfer-fee basis. Wages &amp; amortisation are handled in the compliance check.</p>
+              </div>
+
+              <div className="p-5 space-y-4">
+                {WINDOWS.filter((w) => dealRows.some((r) => r.window === w.id)).map((w) => (
+                  <div key={w.id}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded border ${WINDOW_BADGE[w.id]}`}>{w.label}</span>
+                    </div>
+                    <ul className="space-y-1">
+                      {dealRows.filter((r) => r.window === w.id).map((r, i) => (
+                        <li key={i} className="flex items-center justify-between text-sm bg-neutral-900 border border-neutral-800 rounded-md px-3 py-1.5">
+                          <span className="text-neutral-300 truncate mr-3">
+                            <span className="mr-1.5 text-[10px] px-1 py-0.5 rounded border border-neutral-700 text-neutral-400">{r.dir === "out" ? "IN" : "OUT"}</span>
+                            {r.text}
+                          </span>
+                          <span className={`tabular-nums font-semibold shrink-0 ${r.dir === "out" ? "text-red-400" : "text-emerald-400"}`}>
+                            {r.dir === "out" ? "−" : "+"}£{r.amount}m
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-neutral-800">
+                  <MiniStat label="Expenditure" value={`£${Math.round(dealSpend)}m`} tone="text-red-400" />
+                  <MiniStat label="Income" value={`£${Math.round(dealIncome)}m`} tone="text-emerald-400" />
+                  <MiniStat label={netSpend >= 0 ? "Net spend" : "Net income"} value={`£${Math.abs(Math.round(netSpend))}m`} tone={netSpend >= 0 ? "text-red-400" : "text-emerald-400"} />
+                </div>
+                <p className="text-[10px] text-neutral-600">Buy clauses marked “(assumed)” are options the simulation treats as exercised. Loan fees count toward spend/income in the window they’re agreed.</p>
+              </div>
+
+              <div className="p-4 border-t border-neutral-800 flex gap-2 justify-end bg-neutral-950 sticky bottom-0">
+                <button onClick={() => setShowDealSheet(false)} className="rounded-lg px-4 py-2 text-sm font-medium border border-neutral-700 text-neutral-300 hover:border-neutral-500 transition">← Keep editing</button>
+                <button onClick={() => { setShowDealSheet(false); setStep("compliance"); }} className="rounded-lg px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition">Continue to compliance →</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* -------- Zone-crossing toast -------- */}
         {zoneToast && (
           <div className="fixed inset-x-0 bottom-20 lg:bottom-6 z-[60] flex justify-center pointer-events-none px-4">
@@ -1348,7 +1427,7 @@ export default function Home() {
                   </span>
                   <svg viewBox="0 0 20 20" fill="currentColor" className="ml-1 h-4 w-4 shrink-0 text-neutral-500"><path d="M10 6l5 6H5z" /></svg>
                 </button>
-                <button onClick={() => setStep("compliance")} className="shrink-0 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 text-sm font-bold text-white transition">
+                <button onClick={reviewCompliance} className="shrink-0 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 text-sm font-bold text-white transition">
                   Review →
                 </button>
               </div>

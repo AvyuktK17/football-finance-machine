@@ -121,9 +121,11 @@ export default function LineupBuilder({
   const validKeys = useMemo(() => new Set(roster.map((r) => r.key)), [roster]);
 
   const [lineup, setLineup] = useState<Lineup>(() => sanitizeLineup(initial, validKeys) ?? emptyLineup("433"));
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [configSlot, setConfigSlot] = useState<number | null>(null);
+  const [configSearch, setConfigSearch] = useState("");
+  /** Player being assigned via the click-a-card modal (choose slot + role). */
+  const [assignKey, setAssignKey] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<"ALL" | PlayerPosition>("ALL");
   // Below `sm` the pitch nodes are 64px (vs 80px) — used to fit name text.
@@ -146,11 +148,10 @@ export default function LineupBuilder({
 
   function assign(slotIndex: number, key: string | null) {
     setLineup((l) => placeInSlot(l, slotIndex, key));
-    setSelectedKey(null);
   }
   function handleSlotActivate(slotIndex: number) {
-    if (selectedKey) assign(slotIndex, selectedKey);
-    else setConfigSlot(slotIndex);
+    setConfigSearch("");
+    setConfigSlot(slotIndex);
   }
   function changeFormation(f: FormationId) {
     setLineup((l) => reshapeLineup(l, f, (k) => byKey.get(k)?.position));
@@ -302,9 +303,7 @@ export default function LineupBuilder({
               const warn = !!entry && slotFit(slot, entry.position) === "soft";
               const backups = lineup.subs[i] ?? [];
               const primaryBackup = backups[0] ? byKey.get(backups[0]) : undefined;
-              const wouldReject =
-                (selectedKey && slotFit(slot, byKey.get(selectedKey)?.position ?? "MF") === "hard") ||
-                (dragKey && slotFit(slot, byKey.get(dragKey)?.position ?? "MF") === "hard");
+              const wouldReject = dragKey && slotFit(slot, byKey.get(dragKey)?.position ?? "MF") === "hard";
               return (
                 <div
                   key={slot.id}
@@ -319,7 +318,7 @@ export default function LineupBuilder({
                   }}
                 >
                   <div
-                    onClick={() => { if (!(selectedKey && slotFit(slot, byKey.get(selectedKey)?.position ?? "MF") === "hard")) handleSlotActivate(i); }}
+                    onClick={() => handleSlotActivate(i)}
                     className="flex flex-col items-center group cursor-pointer"
                   >
                     <div
@@ -433,10 +432,9 @@ export default function LineupBuilder({
                 draggable
                 onDragStart={(e) => { e.dataTransfer.setData("text/plain", player.key); setDragKey(player.key); }}
                 onDragEnd={() => setDragKey(null)}
-                onClick={() => setSelectedKey((k) => (k === player.key ? null : player.key))}
+                onClick={() => setAssignKey(player.key)}
                 className={`p-2.5 rounded-xl border flex items-center justify-between transition cursor-grab active:cursor-grabbing ${
-                  selectedKey === player.key ? "border-white/40 bg-white/5"
-                  : isStarter ? "bg-emerald-950/10 border-emerald-500/20"
+                  isStarter ? "bg-emerald-950/10 border-emerald-500/20"
                   : isSub ? "bg-cyan-950/10 border-cyan-500/20"
                   : "bg-[#101420] border-[#1d2436]/60 hover:bg-[#141a2a] hover:border-[#2b3550]"
                 }`}
@@ -482,9 +480,7 @@ export default function LineupBuilder({
             );
           })}
         </div>
-        {selectedKey && (
-          <p className="p-3 text-[10px] text-emerald-400 font-bold border-t border-[#1a1f2e] shrink-0">👉 {byKey.get(selectedKey)?.name} selected — click a pitch spot to place him.</p>
-        )}
+        <p className="p-3 text-[10px] text-neutral-600 border-t border-[#1a1f2e] shrink-0">Tap a card to choose his position &amp; role, or drag him straight onto the pitch.</p>
       </aside>
 
       {/* ===================== SLOT CONFIG MODAL ===================== */}
@@ -494,7 +490,10 @@ export default function LineupBuilder({
         const starter = starterKey ? byKey.get(starterKey) : undefined;
         const backups = lineup.subs[configSlot] ?? [];
         const assignedHere = new Set([starterKey, ...backups].filter(Boolean) as string[]);
-        const pool = roster.filter((r) => !assignedHere.has(r.key)).sort((a, b) => b.marketValue - a.marketValue);
+        const cq = configSearch.trim().toLowerCase();
+        const pool = roster
+          .filter((r) => !assignedHere.has(r.key) && (!cq || r.name.toLowerCase().includes(cq)))
+          .sort((a, b) => b.marketValue - a.marketValue);
         return (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={() => setConfigSlot(null)}>
             <div className="w-full max-w-lg bg-[#0e121d] rounded-2xl border border-[#232a3d] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -558,6 +557,14 @@ export default function LineupBuilder({
 
                 <div>
                   <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-2">Assign from squad</h4>
+                  <input
+                    value={configSearch}
+                    onChange={(e) => setConfigSearch(e.target.value)}
+                    placeholder="Type a name to filter…"
+                    autoFocus
+                    className="w-full mb-2 px-3 py-2 text-xs bg-[#121622] border border-[#1d2436] focus:border-indigo-500 text-white placeholder-neutral-500 rounded-lg outline-none transition"
+                  />
+                  {pool.length === 0 && <p className="p-3 text-xs text-neutral-500">No player matches “{configSearch}”.</p>}
                   <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
                     {pool.map((player) => {
                       const fit = slotFit(slot, player.position);
@@ -592,6 +599,73 @@ export default function LineupBuilder({
 
               <div className="p-4 bg-[#0a0d15] border-t border-[#232a3d] flex justify-end">
                 <button onClick={() => setConfigSlot(null)} className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition">Done</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ===================== PLAYER ASSIGN MODAL (click a squad card) ===================== */}
+      {assignKey !== null && (() => {
+        const player = byKey.get(assignKey);
+        if (!player) return null;
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={() => setAssignKey(null)}>
+            <div className="w-full max-w-lg bg-[#0e121d] rounded-2xl border border-[#232a3d] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="p-5 border-b border-[#232a3d] flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-gray-200">{getPlayerFlag(player.name)} {player.name}</h3>
+                  <p className="text-xs text-neutral-400">{player.position} · £{Math.round(player.marketValue)}m — pick a position and role. He can start one spot and back up several.</p>
+                </div>
+                <button onClick={() => setAssignKey(null)} className="p-1.5 rounded-lg bg-[#192033] hover:bg-[#232c45] text-neutral-400 hover:text-white transition">✕</button>
+              </div>
+
+              <div className="p-4 space-y-1.5 max-h-[65vh] overflow-y-auto">
+                {formation.slots.map((slot, i) => {
+                  const fit = slotFit(slot, player.position);
+                  const starter = lineup.slots[i] ? byKey.get(lineup.slots[i]!) : undefined;
+                  const isStarterHere = lineup.slots[i] === player.key;
+                  const isSubHere = (lineup.subs[i] ?? []).includes(player.key);
+                  return (
+                    <div key={slot.id} className={`p-2.5 rounded-lg border flex items-center justify-between text-xs ${fit === "hard" ? "opacity-35 border-[#1d2436]/40 bg-[#0f131e]" : "bg-[#121622] border-[#1d2436]/60"}`}>
+                      <div className="min-w-0 mr-2">
+                        <span className="font-bold text-indigo-400">{slot.label}</span>
+                        <span className="text-neutral-400 ml-2 truncate">
+                          {starter ? (isStarterHere ? "his spot" : starter.name) : "empty"}
+                          {fit === "soft" && <span className="text-amber-400 ml-1.5">⚠ off-position</span>}
+                        </span>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        {isStarterHere ? (
+                          <button onClick={() => setLineup((l) => removeMember(l, i, player.key))} className="px-2 py-1 rounded bg-red-950/20 hover:bg-red-900/40 text-red-400 border border-red-900/20 text-[10px] font-bold transition">Unset starter</button>
+                        ) : (
+                          <button
+                            disabled={fit === "hard"}
+                            onClick={() => setLineup((l) => placeInSlot(l, i, player.key))}
+                            className="px-2 py-1 bg-emerald-600/20 border border-emerald-500/30 enabled:hover:bg-emerald-600 enabled:hover:text-white text-emerald-400 text-[10px] font-bold rounded disabled:opacity-40"
+                          >
+                            Starter
+                          </button>
+                        )}
+                        {isSubHere ? (
+                          <button onClick={() => setLineup((l) => removeMember(l, i, player.key))} className="px-2 py-1 rounded bg-red-950/20 hover:bg-red-900/40 text-red-400 border border-red-900/20 text-[10px] font-bold transition">Unset sub</button>
+                        ) : (
+                          <button
+                            disabled={fit === "hard" || isStarterHere}
+                            onClick={() => setLineup((l) => addBackup(l, i, player.key))}
+                            className="px-2 py-1 bg-cyan-600/20 border border-cyan-500/30 enabled:hover:bg-cyan-600 enabled:hover:text-white text-cyan-400 text-[10px] font-bold rounded disabled:opacity-40"
+                          >
+                            Sub
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="p-4 bg-[#0a0d15] border-t border-[#232a3d] flex justify-end">
+                <button onClick={() => setAssignKey(null)} className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition">Done</button>
               </div>
             </div>
           </div>

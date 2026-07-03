@@ -33,8 +33,8 @@ export const FORMATIONS: Record<FormationId, { name: string; slots: FormationSlo
     slots: [
       { id: "GK", role: "GK", label: "GK", x: 50, y: 91 },
       { id: "LB", role: "DF", label: "LB", x: 15, y: 72 },
-      { id: "LCB", role: "DF", label: "CB", x: 37, y: 77 },
-      { id: "RCB", role: "DF", label: "CB", x: 63, y: 77 },
+      { id: "LCB", role: "DF", label: "LCB", x: 37, y: 77 },
+      { id: "RCB", role: "DF", label: "RCB", x: 63, y: 77 },
       { id: "RB", role: "DF", label: "RB", x: 85, y: 72 },
       { id: "LCM", role: "MF", label: "CM", x: 28, y: 52 },
       { id: "CDM", role: "MF", label: "CDM", x: 50, y: 60 },
@@ -49,8 +49,8 @@ export const FORMATIONS: Record<FormationId, { name: string; slots: FormationSlo
     slots: [
       { id: "GK", role: "GK", label: "GK", x: 50, y: 91 },
       { id: "LB", role: "DF", label: "LB", x: 15, y: 72 },
-      { id: "LCB", role: "DF", label: "CB", x: 37, y: 77 },
-      { id: "RCB", role: "DF", label: "CB", x: 63, y: 77 },
+      { id: "LCB", role: "DF", label: "LCB", x: 37, y: 77 },
+      { id: "RCB", role: "DF", label: "RCB", x: 63, y: 77 },
       { id: "RB", role: "DF", label: "RB", x: 85, y: 72 },
       { id: "LM", role: "MF", label: "LM", x: 15, y: 48 },
       { id: "LCM", role: "MF", label: "CM", x: 38, y: 54 },
@@ -65,8 +65,8 @@ export const FORMATIONS: Record<FormationId, { name: string; slots: FormationSlo
     slots: [
       { id: "GK", role: "GK", label: "GK", x: 50, y: 91 },
       { id: "LB", role: "DF", label: "LB", x: 15, y: 72 },
-      { id: "LCB", role: "DF", label: "CB", x: 37, y: 77 },
-      { id: "RCB", role: "DF", label: "CB", x: 63, y: 77 },
+      { id: "LCB", role: "DF", label: "LCB", x: 37, y: 77 },
+      { id: "RCB", role: "DF", label: "RCB", x: 63, y: 77 },
       { id: "RB", role: "DF", label: "RB", x: 85, y: 72 },
       { id: "LDM", role: "MF", label: "CDM", x: 37, y: 60 },
       { id: "RDM", role: "MF", label: "CDM", x: 63, y: 60 },
@@ -80,9 +80,9 @@ export const FORMATIONS: Record<FormationId, { name: string; slots: FormationSlo
     name: "3-5-2",
     slots: [
       { id: "GK", role: "GK", label: "GK", x: 50, y: 91 },
-      { id: "LCB", role: "DF", label: "CB", x: 27, y: 77 },
+      { id: "LCB", role: "DF", label: "LCB", x: 27, y: 77 },
       { id: "CB", role: "DF", label: "CB", x: 50, y: 80 },
-      { id: "RCB", role: "DF", label: "CB", x: 73, y: 77 },
+      { id: "RCB", role: "DF", label: "RCB", x: 73, y: 77 },
       { id: "LWB", role: "DF", label: "LWB", x: 10, y: 56, altRole: "MF" },
       { id: "LCM", role: "MF", label: "CM", x: 34, y: 55 },
       { id: "CDM", role: "MF", label: "CDM", x: 50, y: 62 },
@@ -96,9 +96,9 @@ export const FORMATIONS: Record<FormationId, { name: string; slots: FormationSlo
     name: "3-4-3",
     slots: [
       { id: "GK", role: "GK", label: "GK", x: 50, y: 91 },
-      { id: "LCB", role: "DF", label: "CB", x: 27, y: 77 },
+      { id: "LCB", role: "DF", label: "LCB", x: 27, y: 77 },
       { id: "CB", role: "DF", label: "CB", x: 50, y: 80 },
-      { id: "RCB", role: "DF", label: "CB", x: 73, y: 77 },
+      { id: "RCB", role: "DF", label: "RCB", x: 73, y: 77 },
       { id: "LM", role: "MF", label: "LM", x: 13, y: 52, altRole: "DF" },
       { id: "LCM", role: "MF", label: "CM", x: 38, y: 56 },
       { id: "RCM", role: "MF", label: "CM", x: 62, y: 56 },
@@ -113,9 +113,9 @@ export const FORMATIONS: Record<FormationId, { name: string; slots: FormationSlo
     slots: [
       { id: "GK", role: "GK", label: "GK", x: 50, y: 91 },
       { id: "LWB", role: "DF", label: "LWB", x: 9, y: 66, altRole: "MF" },
-      { id: "LCB", role: "DF", label: "CB", x: 29, y: 78 },
+      { id: "LCB", role: "DF", label: "LCB", x: 29, y: 78 },
       { id: "CB", role: "DF", label: "CB", x: 50, y: 81 },
-      { id: "RCB", role: "DF", label: "CB", x: 71, y: 78 },
+      { id: "RCB", role: "DF", label: "RCB", x: 71, y: 78 },
       { id: "RWB", role: "DF", label: "RWB", x: 91, y: 66, altRole: "MF" },
       { id: "LCM", role: "MF", label: "CM", x: 30, y: 52 },
       { id: "CDM", role: "MF", label: "CDM", x: 50, y: 58 },
@@ -131,8 +131,13 @@ export const FORMATION_IDS = Object.keys(FORMATIONS) as FormationId[];
 /**
  * A lineup: formation + player keys per slot (index-aligned with slots).
  * `subs` is also index-aligned with slots — each entry is an ordered list of
- * backup player keys for that position (top of the list = primary sub). A
- * player key appears at most once across all starters and all backup lists.
+ * backup player keys for that position (top of the list = primary sub).
+ *
+ * Membership rules:
+ * - A player starts in AT MOST ONE slot.
+ * - A player may be a backup in ANY NUMBER of slots (once per list) — including
+ *   slots where someone else starts, and while starting elsewhere themselves.
+ * - A player is never a backup of the slot they start in.
  */
 export interface Lineup {
   formation: FormationId;
@@ -201,32 +206,39 @@ export function slotFit(slot: FormationSlot, pos: PlayerPosition): SlotFit {
 }
 
 /**
- * Place a starter into a slot (swapping with any occupant). Pure. Also removes
- * the player from any backup list so a key is never both a starter and a sub.
+ * Place a starter into a slot (swapping with any occupant). Pure.
+ * The player may remain a backup in OTHER slots; he is only removed from the
+ * backup list of the slot he now starts in (and any starter is scrubbed from
+ * his own slot's backups after a swap).
  */
 export function placeInSlot(lineup: Lineup, slotIndex: number, key: string | null): Lineup {
   const slots = [...lineup.slots];
-  let subs = lineup.subs.map((s) => [...s]);
-  // A promoted player can't remain anyone's backup.
-  if (key) subs = subs.map((arr) => arr.filter((k) => k !== key));
+  const subs = lineup.subs.map((s) => [...s]);
   // If the player is already on the pitch, vacate his old slot (swap-aware).
   const oldIndex = key ? slots.indexOf(key) : -1;
   const displaced = slots[slotIndex] ?? null;
   if (oldIndex !== -1) slots[oldIndex] = displaced;
   slots[slotIndex] = key;
+  // Invariant: no slot's starter appears in that same slot's backup list.
+  for (let i = 0; i < slots.length; i++) {
+    const starter = slots[i];
+    if (starter) subs[i] = (subs[i] ?? []).filter((k) => k !== starter);
+  }
   return { ...lineup, slots, subs };
 }
 
 /**
  * Add a backup to a slot's substitute hierarchy (appended = lowest priority).
- * Pulls the player out of any starter slot or other backup list first.
+ * A player can back up multiple slots and can be a backup while starting
+ * elsewhere — the only bans are duplicating within one list and backing up
+ * the slot he already starts in.
  */
 export function addBackup(lineup: Lineup, slotIndex: number, key: string): Lineup {
-  const slots = lineup.slots.map((k) => (k === key ? null : k));
-  const subs = lineup.subs.map((arr) => arr.filter((k) => k !== key));
+  if (lineup.slots[slotIndex] === key) return lineup; // can't be his own backup
+  const subs = lineup.subs.map((s) => [...s]);
   if (!subs[slotIndex]) subs[slotIndex] = [];
   if (!subs[slotIndex].includes(key)) subs[slotIndex] = [...subs[slotIndex], key];
-  return { ...lineup, slots, subs };
+  return { ...lineup, subs };
 }
 
 /** Remove a player from a slot — as its starter or from its backup list. Pure. */
@@ -251,18 +263,20 @@ export function sanitizeLineup(
   if (!raw || !FORMATION_IDS.includes(raw.formation as FormationId)) return null;
   const formation = raw.formation as FormationId;
   const n = FORMATIONS[formation].slots.length;
-  // A key may appear at most once across starters and every backup list.
-  const seen = new Set<string>();
+  // Starters: valid keys, each starting at most once.
+  const startersSeen = new Set<string>();
   const slots = Array.from({ length: n }, (_, i) => {
     const k = raw.slots?.[i] ?? null;
-    if (k && validKeys.has(k) && !seen.has(k)) { seen.add(k); return k; }
+    if (k && validKeys.has(k) && !startersSeen.has(k)) { startersSeen.add(k); return k; }
     return null;
   });
+  // Backups: valid keys, unique within each list, never the slot's own starter.
+  // (A key MAY appear in several lists and may also start elsewhere.)
   const subs = Array.from({ length: n }, (_, i) => {
     const arr = raw.subs?.[i] ?? [];
     const out: string[] = [];
     for (const k of arr) {
-      if (k && validKeys.has(k) && !seen.has(k)) { seen.add(k); out.push(k); }
+      if (k && validKeys.has(k) && k !== slots[i] && !out.includes(k)) out.push(k);
     }
     return out;
   });
