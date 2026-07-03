@@ -441,5 +441,54 @@ console.log("— share codec");
 }
 
 // ---------------------------------------------------------------------------
+console.log("— wage policy (renew vs expire)");
+{
+  const wExp = weeklyWageToAnnualMillions(expiring.weeklyWage);
+  // Default = renew: wages persist (asserted in the baseline block too).
+  const renew = projectPlan(inputs);
+  assert(approx(renew.seasons[2].state.annualWages, 300), "renew: wages persist through season 2");
+
+  // Expire: Expiring's contract ends 2027 → wage still on in season 0,
+  // off from season 1 onward.
+  const expire = projectPlan({ ...inputs, wagePolicy: "expire" });
+  assert(approx(expire.seasons[0].state.annualWages, 300), "expire: wage on while contract runs");
+  assert(approx(expire.seasons[1].state.annualWages, 300 - wExp), "expire: wage off after contract end");
+  assert(approx(expire.seasons[2].state.annualWages, 300 - wExp), "expire: stays off");
+
+  // Selling the expiring player must not double-remove his wage under expire.
+  const withSale = projectPlan({
+    ...inputs,
+    wagePolicy: "expire",
+    sales: [{ window: "W1", name: "Expiring", saleFee: 10 }],
+  });
+  assert(approx(withSale.seasons[1].state.annualWages, 300 - wExp), "expire+sale: wage removed exactly once");
+
+  // Loan-out with executed buy: buy takes the wage from season 1; expiry (also
+  // season 1) must not remove it a second time.
+  const withLoanBuy = projectPlan({
+    ...inputs,
+    wagePolicy: "expire",
+    loansOut: [{
+      window: "W1", name: "Expiring", loanFee: 0, wageCoveredPct: 1, lengthSeasons: 1,
+      buyClause: { type: "obligation", price: 10 },
+    }],
+  });
+  assert(approx(withLoanBuy.seasons[1].state.annualWages, 300 - wExp), "expire+loan-buy: no double removal");
+
+  // solveMaxBid inherits the policy (lower wages ⇒ at least as big a fee).
+  const q = { window: "W3" as const, weeklyWage: 150_000, contractLength: 5 };
+  const bidRenew = solveMaxBid(inputs, q);
+  const bidExpire = solveMaxBid({ ...inputs, wagePolicy: "expire" }, q);
+  assert(bidExpire.maxFee >= bidRenew.maxFee, "expire policy frees headroom for max bid");
+
+  // Codec: wagePolicy roundtrips.
+  const enc = encodeScenario({
+    clubId: "tottenham", yearId: "fy2425", track: "AUTO", revenueGrowth: 0.03,
+    wagePolicy: "expire", europeBySeason: ["NONE", "NONE", "NONE"], signings: [], sales: [],
+  });
+  assert(decodeScenario(enc)?.wagePolicy === "expire", "wagePolicy survives share codec");
+}
+
+// ---------------------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

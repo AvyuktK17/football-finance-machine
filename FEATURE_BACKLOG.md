@@ -1,5 +1,34 @@
 # Feature Backlog
 
+## ✅ Shipped 3 Jul 2026
+- **Club accent colours** — `src/data/clubColors.ts`; strip on club cards,
+  header gradient + club dot, result-card top strip. Accents live only on
+  non-semantic chrome; compliance zones keep green/amber/red exclusively.
+- **Club selection upgrades** — search box, sort (Best SCR / Headroom / A–Z),
+  headroom on cards, and a **League table view** (sortable compliance table,
+  click a row to start planning).
+- **Zone-crossing feedback** — toast + one-shot pulse on the SCR meter when
+  the plan (not a club/season switch) moves projected SCR across a line.
+- **Sale-price guardrails** — "mkt £Xm" hint on every sale row; fee > 2×
+  market value turns the input amber with a bidding-war caveat. Shared
+  `MoneyInput` gives every typed money field one consistent style.
+- **Shareable result card** — compliance headline is now a screenshot-ready
+  card: club colour strip + name, SCR before→after, zone, headroom, squad
+  value, key-move chips (top 5), branding footer.
+- **Wage policy (renew vs expire)** — engine-level `wagePolicy` in
+  `forwardPlanner.ts`: "renew" (default, wages persist) or "expire" (wage
+  drops off the season after contract end; no double-count with sales or
+  executed loan-out buys). UI toggle in assumptions; round-trips through
+  share links & saves. +8 engine tests (241 total).
+- Stepper `reached` guard fixed (compliance needs ≥1 move); 9px labels → 10px.
+
+## Parked (waiting on data)
+- **Player picker for signings** — pick real transfer targets from our own
+  dataset (prefill fee/position/wage). Parked until the database covers the
+  big-5 European leagues + Eredivisie, Liga NOS, Scottish PL and a couple of
+  South American leagues; with EPL-only data — and real fees diverging widely
+  from Transfermarkt values — free-text entry stays primary.
+
 ## ✅ Shipped 2 Jul 2026
 - **Loans in/out** — loan fee, wage split with parent club, option/obligation
   to buy (options can be "assumed exercised"), 1- or 2-season loans, January

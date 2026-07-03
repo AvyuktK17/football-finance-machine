@@ -17,9 +17,12 @@
  * the base year's own tier (documented estimates, see EUROPE_TIER_REVENUE).
  *
  * Modelling assumptions (documented, deliberately conservative):
- * - Base wages persist across seasons (clubs typically renew/replace); base
- *   amortisation ROLLS OFF as existing contracts end — an accounting fact we
- *   can derive from per-player fee / signedYear / contractEndYear.
+ * - Base wages: two user-selectable policies (`wagePolicy`).
+ *   "renew" (default) — wages persist across seasons (clubs typically renew or
+ *   replace like-for-like). "expire" — a player's wage drops off in the first
+ *   season AFTER his contract ends (no renewal, no replacement). Either way,
+ *   base amortisation ROLLS OFF as existing contracts end — an accounting fact
+ *   we can derive from per-player fee / signedYear / contractEndYear.
  * - January arrivals/departures book half a season of wages & amortisation in
  *   the season of the move, full weight thereafter.
  * - Sale profit = fee − book value AT THE MOMENT OF SALE (book value keeps
@@ -264,7 +267,15 @@ export interface ForwardInputs {
   baseEuropeTier?: EuropeTier;
   /** Force a track; undefined = auto per season. */
   track?: RegulatoryTrack;
+  /**
+   * What happens to a base-squad player's wage when his contract ends.
+   * "renew" (default) — wage persists (renewal/like-for-like replacement).
+   * "expire" — wage drops off from the first season after contract end.
+   */
+  wagePolicy?: WagePolicy;
 }
+
+export type WagePolicy = "renew" | "expire";
 
 export interface SeasonProjection {
   seasonIndex: number;
@@ -364,6 +375,7 @@ export function projectPlan(inputs: ForwardInputs): ForwardPlan {
     base, asOfYear, squad, signings, sales, revenueGrowth, europeBySeason, track,
   } = inputs;
   const baseTier: EuropeTier = inputs.baseEuropeTier ?? "NONE";
+  const wagePolicy: WagePolicy = inputs.wagePolicy ?? "renew";
   const squadByName = new Map(squad.map((p) => [p.name, p]));
   const soldNames = new Set(sales.map((x) => x.name));
   // A player can be sold OR loaned out, not both — sales win, loan is ignored.
@@ -371,6 +383,7 @@ export function projectPlan(inputs: ForwardInputs): ForwardPlan {
     (lo) => squadByName.has(lo.name) && !soldNames.has(lo.name),
   );
   const loansIn = inputs.loansIn ?? [];
+  const loanOutByName = new Map(loansOut.map((lo) => [lo.name, lo]));
 
   const seasons: SeasonProjection[] = [];
 
@@ -417,11 +430,30 @@ export function projectPlan(inputs: ForwardInputs): ForwardPlan {
             : memberBookValue(p, asOfYear, windowYearOffset(w));
           tradingProfit += sale.saleFee - bv;
         }
-      } else if (pAmort > 0 && !contractActiveInSeason(p, asOfYear, s)) {
-        // Natural roll-off: contract ended, amortisation stops. (Wages are
-        // assumed renewed/replaced — see file header.)
-        amort -= pAmort;
-        rolledOff += pAmort;
+      } else {
+        const expired = !contractActiveInSeason(p, asOfYear, s);
+        if (pAmort > 0 && expired) {
+          // Natural roll-off: contract ended, amortisation stops.
+          amort -= pAmort;
+          rolledOff += pAmort;
+        }
+        // Wage policy "expire": the wage drops off once the contract has
+        // ended (under "renew" it persists — see file header).
+        if (expired && wagePolicy === "expire") {
+          const lo = loanOutByName.get(p.name);
+          // If an executed loan-out buy has already taken his full wage off
+          // the books this season, don't remove it twice.
+          const goneViaBuy =
+            lo && buyExecutes(lo.buyClause) && s >= loanBuySeason(lo.window, lo.lengthSeasons);
+          if (!goneViaBuy) {
+            // During a loan-out the borrower already covers a share of the
+            // wage — only the residual share is still ours to drop.
+            const loanShareCovered = lo
+              ? (loanSeasonWeights(lo.window, lo.lengthSeasons)[s] ?? 0) * lo.wageCoveredPct
+              : 0;
+            wages -= weeklyWageToAnnualMillions(p.weeklyWage) * Math.max(0, 1 - loanShareCovered);
+          }
+        }
       }
     }
 
@@ -677,6 +709,8 @@ export interface SharedScenario {
   yearId: string;
   track: string; // "AUTO" | RegulatoryTrack
   revenueGrowth: number;
+  /** absent in legacy payloads — treat as "renew" */
+  wagePolicy?: WagePolicy;
   /** Tiers; legacy payloads may contain booleans — run through normalizeEuropeTier. */
   europeBySeason: readonly (EuropeTier | boolean)[];
   signings: PlannedSigning[];

@@ -35,7 +35,9 @@ import {
   type BuyClause,
   type ForwardInputs,
   type SharedScenario,
+  type WagePolicy,
 } from "@/utils/forwardPlanner";
+import { clubAccent } from "@/data/clubColors";
 import { solveClearingHouse, type ClearingResult, type ClearingSolution } from "@/utils/clearingHouse";
 import LineupBuilder, { type RosterEntry } from "@/components/LineupBuilder";
 import Onboarding from "@/components/Onboarding";
@@ -200,6 +202,15 @@ export default function Home() {
   const [saves, setSaves] = useState<SavedPlan[]>([]);
   const [saveName, setSaveName] = useState("");
   const [showSaves, setShowSaves] = useState(false);
+  const [wagePolicy, setWagePolicy] = useState<WagePolicy>("renew");
+
+  // Club-selection screen controls.
+  const [clubQuery, setClubQuery] = useState("");
+  const [clubSort, setClubSort] = useState<"scr" | "headroom" | "az">("scr");
+  const [clubView, setClubView] = useState<"cards" | "table">("cards");
+
+  // Zone-crossing feedback (toast + meter pulse).
+  const [zoneToast, setZoneToast] = useState<{ zone: Zone; improved: boolean } | null>(null);
 
   // Mobile adaptations: `lg` is where the two-column transfers layout kicks in.
   const isMobile = useMediaQuery("(max-width: 1023px)");
@@ -265,6 +276,7 @@ export default function Home() {
     setLastYear(y);
     setTrack(s.track === "UEFA" || s.track === "PL_DOMESTIC" ? s.track : "AUTO");
     setRevenueGrowth(typeof s.revenueGrowth === "number" ? s.revenueGrowth : 0.03);
+    setWagePolicy(s.wagePolicy === "expire" ? "expire" : "renew");
     if (Array.isArray(s.europeBySeason) && s.europeBySeason.length === 3) {
       setEuropeBySeason(s.europeBySeason.map(normalizeEuropeTier));
     }
@@ -315,7 +327,7 @@ export default function Home() {
 
   function currentPayload(): SharedScenario {
     return {
-      clubId, yearId, track, revenueGrowth, europeBySeason,
+      clubId, yearId, track, revenueGrowth, wagePolicy, europeBySeason,
       signings: incomings.map(({ window: w, fee, weeklyWage, contractLength, isFree, marketValue, position, label }) => ({
         window: w, fee, weeklyWage, contractLength, isFree, marketValue, position, label,
       })),
@@ -414,9 +426,10 @@ export default function Home() {
       europeBySeason,
       baseEuropeTier: yearEuropeTier(year),
       track: resolvedTrack,
+      wagePolicy,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clubId, yearId, planSignings, planSales, planLoansOut, planLoansIn, revenueGrowth, europeBySeason, resolvedTrack],
+    [clubId, yearId, planSignings, planSales, planLoansOut, planLoansIn, revenueGrowth, europeBySeason, resolvedTrack, wagePolicy],
   );
 
   const plan = useMemo(() => projectPlan(forwardInputs), [forwardInputs]);
@@ -442,6 +455,23 @@ export default function Home() {
   const soldNames = useMemo(() => new Set(sales.map((s) => s.name)), [sales]);
   const loanedOutNames = useMemo(() => new Set(loansOut.map((l) => l.name)), [loansOut]);
   const totalMoves = incomings.length + sales.length + loansOut.length + loansIn.length;
+
+  // ---- Zone-crossing feedback -----------------------------------------------
+  // Toast + meter pulse when the PLAN (not a club/season/step switch) moves the
+  // projected SCR across a compliance line.
+  const ZONE_SEVERITY: Record<Zone, number> = { GREEN: 0, YELLOW: 1, RED: 2 };
+  const zoneCtx = `${clubId}|${selectedSeason}|${step}`;
+  const zoneRef = useRef<{ ctx: string; zone: Zone } | null>(null);
+  useEffect(() => {
+    const prev = zoneRef.current;
+    zoneRef.current = { ctx: zoneCtx, zone: after.zone };
+    if (!prev || prev.ctx !== zoneCtx || prev.zone === after.zone) return;
+    if (step !== "transfers") return;
+    setZoneToast({ zone: after.zone, improved: ZONE_SEVERITY[after.zone] < ZONE_SEVERITY[prev.zone] });
+    const t = setTimeout(() => setZoneToast(null), 3200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [after.zone, zoneCtx, step]);
 
   // ---- Squad market value (Transfermarkt-style estimates) -------------------
   const mvNow = useMemo(() => squadMarketValueAfter(club.players, [], []), [club]);
@@ -567,16 +597,29 @@ export default function Home() {
   const activeWindowLabel = WINDOWS.find((w) => w.id === activeWindow)!.label;
   const incomingsInWindow = incomings.filter((i) => i.window === activeWindow);
 
-  // Per-club baseline SCR (default year, no plan) for the club-selection cards.
+  // Per-club baseline SCR (default year, no plan) for the club-selection screen.
   const leagueRows = useMemo(
     () =>
       CLUBS.map((c) => {
         const y = getYear(c, c.defaultYearId);
         const r = computeScr(toClubState(y));
-        return { club: c, year: y, result: r };
-      }).sort((a, b) => a.result.scr - b.result.scr),
+        const headroom = r.limit * r.denominator - r.squadCosts;
+        return { club: c, year: y, result: r, headroom };
+      }),
     [],
   );
+
+  // Search + sort applied to the club-selection screen (cards AND table).
+  const visibleLeagueRows = useMemo(() => {
+    const q = clubQuery.trim().toLowerCase();
+    const rows = q
+      ? leagueRows.filter((r) => r.club.name.toLowerCase().includes(q) || r.club.shortName.toLowerCase().includes(q))
+      : [...leagueRows];
+    if (clubSort === "az") rows.sort((a, b) => a.club.shortName.localeCompare(b.club.shortName));
+    else if (clubSort === "headroom") rows.sort((a, b) => b.headroom - a.headroom);
+    else rows.sort((a, b) => a.result.scr - b.result.scr);
+    return rows;
+  }, [leagueRows, clubQuery, clubSort]);
 
   function chooseClub(id: string) {
     setClubId(id);
@@ -600,43 +643,129 @@ export default function Home() {
             <p className="mt-6 text-sm font-medium text-neutral-300">Choose your club to begin →</p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {leagueRows.map((row) => {
-              const z = ZONE_STYLES[row.result.zone];
-              const stat = ZONE_STATUS[row.result.zone];
-              const dataStatus = STATUS_STYLES[row.year.status];
-              return (
-                <button
-                  key={row.club.id}
-                  onClick={() => chooseClub(row.club.id)}
-                  className="group text-left rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5 transition hover:border-neutral-600 hover:bg-neutral-900"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h2 className="text-lg font-bold leading-tight truncate">{row.club.shortName}</h2>
-                      <p className="text-[11px] text-neutral-500 truncate">{row.club.name}</p>
-                    </div>
-                    <span className={`shrink-0 h-2.5 w-2.5 rounded-full mt-1.5 ${z.dot}`} />
-                  </div>
-
-                  <div className="mt-4 flex items-baseline gap-2">
-                    <span className={`text-3xl font-black tabular-nums ${z.text}`}>{fmtPct(row.result.scr)}</span>
-                    <span className="text-[11px] text-neutral-500">SCR · limit {fmtPct(row.result.limit)}</span>
-                  </div>
-                  <p className={`mt-1 text-xs font-semibold ${stat.tone}`}>{stat.label}</p>
-
-                  <div className="mt-4 flex flex-wrap gap-1.5">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${dataStatus.cls}`}>{dataStatus.label}</span>
-                    <ReliabilityBadge r={row.club.squadAsOf.reliability} />
-                  </div>
-
-                  <p className="mt-4 text-xs font-medium text-neutral-500 group-hover:text-emerald-400 transition">
-                    Plan transfers →
-                  </p>
+          {/* Search / sort / view controls */}
+          <div className="mb-6 flex flex-wrap items-center gap-2">
+            <input
+              value={clubQuery}
+              onChange={(e) => setClubQuery(e.target.value)}
+              placeholder="Search clubs…"
+              className="flex-1 min-w-[160px] max-w-xs bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:border-neutral-600 outline-none"
+            />
+            <div className="flex rounded-lg border border-neutral-800 bg-neutral-900 p-0.5">
+              {([["scr", "Best SCR"], ["headroom", "Headroom"], ["az", "A–Z"]] as const).map(([k, label]) => (
+                <button key={k} onClick={() => setClubSort(k)} className={`px-3 py-1.5 rounded-md text-xs transition ${clubSort === k ? "bg-neutral-700 text-white" : "text-neutral-400 hover:text-neutral-200"}`}>
+                  {label}
                 </button>
-              );
-            })}
+              ))}
+            </div>
+            <div className="flex rounded-lg border border-neutral-800 bg-neutral-900 p-0.5 ml-auto">
+              {([["cards", "Cards"], ["table", "League table"]] as const).map(([k, label]) => (
+                <button key={k} onClick={() => setClubView(k)} className={`px-3 py-1.5 rounded-md text-xs transition ${clubView === k ? "bg-neutral-700 text-white" : "text-neutral-400 hover:text-neutral-200"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {visibleLeagueRows.length === 0 && (
+            <p className="text-center text-sm text-neutral-500 py-10">No club matches “{clubQuery}”.</p>
+          )}
+
+          {clubView === "cards" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visibleLeagueRows.map((row) => {
+                const z = ZONE_STYLES[row.result.zone];
+                const stat = ZONE_STATUS[row.result.zone];
+                const dataStatus = STATUS_STYLES[row.year.status];
+                const accent = clubAccent(row.club.id);
+                return (
+                  <button
+                    key={row.club.id}
+                    onClick={() => chooseClub(row.club.id)}
+                    className="group relative overflow-hidden text-left rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5 transition hover:border-neutral-600 hover:bg-neutral-900"
+                  >
+                    {/* Club-colour accent strip */}
+                    <span className="absolute inset-y-0 left-0 w-1" style={{ background: accent.primary }} aria-hidden />
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 className="text-lg font-bold leading-tight truncate">{row.club.shortName}</h2>
+                        <p className="text-[11px] text-neutral-500 truncate">{row.club.name}</p>
+                      </div>
+                      <span className={`shrink-0 h-2.5 w-2.5 rounded-full mt-1.5 ${z.dot}`} />
+                    </div>
+
+                    <div className="mt-4 flex items-baseline gap-2">
+                      <span className={`text-3xl font-black tabular-nums ${z.text}`}>{fmtPct(row.result.scr)}</span>
+                      <span className="text-[11px] text-neutral-500">SCR · limit {fmtPct(row.result.limit)}</span>
+                    </div>
+                    <p className={`mt-1 text-xs font-semibold ${stat.tone}`}>{stat.label}</p>
+                    <p className="mt-1 text-[11px] text-neutral-500 tabular-nums">
+                      Headroom {row.headroom >= 0 ? fmtM(row.headroom) : `−${fmtM(Math.abs(row.headroom))}`}
+                    </p>
+
+                    <div className="mt-4 flex flex-wrap gap-1.5">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded border ${dataStatus.cls}`}>{dataStatus.label}</span>
+                      <ReliabilityBadge r={row.club.squadAsOf.reliability} />
+                    </div>
+
+                    <p className="mt-4 text-xs font-medium text-neutral-500 group-hover:text-emerald-400 transition">
+                      Plan transfers →
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-2xl border border-neutral-800">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-neutral-900 text-neutral-500 text-[11px] uppercase tracking-wide">
+                    <tr>
+                      <th className="text-left px-4 py-2.5">#</th>
+                      <th className="text-left px-4 py-2.5">Club</th>
+                      <th className="text-right px-4 py-2.5">SCR</th>
+                      <th className="text-right px-4 py-2.5">Limit</th>
+                      <th className="text-left px-4 py-2.5">Status</th>
+                      <th className="text-right px-4 py-2.5">Headroom</th>
+                      <th className="text-left px-4 py-2.5 hidden sm:table-cell">Data</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleLeagueRows.map((row, i) => {
+                      const z = ZONE_STYLES[row.result.zone];
+                      const stat = ZONE_STATUS[row.result.zone];
+                      const accent = clubAccent(row.club.id);
+                      return (
+                        <tr
+                          key={row.club.id}
+                          onClick={() => chooseClub(row.club.id)}
+                          className="border-t border-neutral-800 cursor-pointer transition hover:bg-neutral-900"
+                        >
+                          <td className="px-4 py-2.5 text-neutral-600 tabular-nums">{i + 1}</td>
+                          <td className="px-4 py-2.5">
+                            <span className="inline-flex items-center gap-2">
+                              <span className="h-2.5 w-2.5 rounded-full shrink-0 ring-1 ring-neutral-700" style={{ background: accent.primary }} aria-hidden />
+                              <span className="font-medium text-neutral-200">{row.club.shortName}</span>
+                            </span>
+                          </td>
+                          <td className={`px-4 py-2.5 text-right font-bold tabular-nums ${z.text}`}>{fmtPct(row.result.scr)}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-neutral-400">{fmtPct(row.result.limit)}</td>
+                          <td className={`px-4 py-2.5 text-xs font-semibold ${stat.tone}`}>{stat.label}</td>
+                          <td className={`px-4 py-2.5 text-right tabular-nums ${row.headroom >= 0 ? "text-neutral-200" : "text-red-400"}`}>
+                            {row.headroom >= 0 ? fmtM(row.headroom) : `−${fmtM(Math.abs(row.headroom))}`}
+                          </td>
+                          <td className="px-4 py-2.5 hidden sm:table-cell"><span className={`text-[10px] px-1.5 py-0.5 rounded border ${STATUS_STYLES[row.year.status].cls}`}>{STATUS_STYLES[row.year.status].label}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="px-4 py-2.5 text-[11px] text-neutral-600 border-t border-neutral-800 bg-neutral-900/40">
+                Baseline SCR per club — default year, no plan. Click a row to start planning.
+              </p>
+            </div>
+          )}
 
           <p className="mt-10 text-center text-[11px] text-neutral-600 max-w-2xl mx-auto">
             Player-level wages, market values, book values, and amortisation are estimates unless marked otherwise.
@@ -648,14 +777,20 @@ export default function Home() {
   }
 
   // Header shared by steps 2–4
+  const accent = clubAccent(clubId);
   const flowHeader = (
-    <><Onboarding /><header className="border-b border-neutral-800 px-4 sm:px-6 py-3 sticky top-0 z-20 bg-neutral-950/90 backdrop-blur">
+    <><Onboarding /><header className="relative border-b border-neutral-800 px-4 sm:px-6 py-3 sticky top-0 z-20 bg-neutral-950/90 backdrop-blur">
+      {/* Club-colour strip */}
+      <div className="absolute inset-x-0 top-0 h-[3px]" style={{ background: `linear-gradient(90deg, ${accent.primary}, transparent 70%)` }} aria-hidden />
       <div className="flex flex-wrap items-center gap-3">
         <button onClick={startOver} className="text-sm font-bold tracking-tight hover:text-emerald-400 transition mr-1">
           Football Finance Machine
         </button>
         <span className="text-neutral-700 hidden sm:inline">·</span>
-        <span className="text-sm text-neutral-300 font-medium">{club.shortName}</span>
+        <span className="inline-flex items-center gap-1.5 text-sm font-medium" style={{ color: accent.text }}>
+          <span className="h-2 w-2 rounded-full ring-1 ring-neutral-700" style={{ background: accent.primary }} aria-hidden />
+          {club.shortName}
+        </span>
         <div className="ml-auto flex items-center gap-2">
           <button onClick={() => setShowSaves((v) => !v)} className={`text-xs rounded-md px-3 py-1.5 border transition ${showSaves ? "border-emerald-600 text-emerald-300 bg-emerald-950/40" : "border-neutral-700 text-neutral-300 hover:border-neutral-500"}`}>
             💾 Plans {saves.length > 0 && <span className="text-neutral-500">({saves.length})</span>}
@@ -666,7 +801,7 @@ export default function Home() {
         </div>
       </div>
       <div className="mt-3">
-        <Stepper current={step} onNavigate={(s) => setStep(s)} reached={{ transfers: true, compliance: totalMoves >= 0, lineup: true }} />
+        <Stepper current={step} onNavigate={(s) => setStep(s)} reached={{ transfers: true, compliance: totalMoves > 0, lineup: true }} />
       </div>
       {showSaves && (
         <div className="mt-3 border-t border-neutral-800 pt-3">
@@ -715,7 +850,7 @@ export default function Home() {
               const z = ZONE_STYLES[s.result.zone];
               return (
                 <button key={s.seasonIndex} onClick={() => setSelectedSeason(s.seasonIndex)} className={`flex-1 rounded-md border px-2 py-1.5 text-center transition ${s.seasonIndex === selectedSeason ? "border-neutral-500 bg-neutral-900" : "border-neutral-800 bg-neutral-900/40 hover:border-neutral-600"}`}>
-                  <span className="block text-[9px] text-neutral-500">{s.label.slice(2)}</span>
+                  <span className="block text-[10px] text-neutral-500">{s.label.slice(2)}</span>
                   <span className={`block text-sm font-bold tabular-nums ${z.text}`}>{fmtPct(s.result.scr)}</span>
                 </button>
               );
@@ -723,12 +858,13 @@ export default function Home() {
           </div>
         </div>
 
-        <div className={`rounded-xl border ${style.border} ${style.soft} p-4`}>
+        {/* key={after.zone} re-runs the pulse animation whenever the zone flips */}
+        <div key={after.zone} className={`rounded-xl border ${style.border} ${style.soft} p-4 animate-[zonePulse_600ms_ease-out]`}>
           <p className="text-[10px] uppercase tracking-wide text-neutral-500">Projected SCR — {season.label}</p>
           <p className={`text-5xl font-black tabular-nums ${style.text}`}>{fmtPct(after.scr)}</p>
           <p className={`text-sm font-semibold mt-1 ${ZONE_STATUS[after.zone].tone}`}>{ZONE_STATUS[after.zone].label}</p>
           <div className="relative mt-4 h-3 rounded bg-neutral-800 overflow-hidden">
-            <div className={`h-full ${style.bar}`} style={{ width: `${pct(after.scr)}%` }} />
+            <div className={`h-full ${style.bar} transition-all duration-300`} style={{ width: `${pct(after.scr)}%` }} />
           </div>
           <div className="flex justify-between text-[10px] text-neutral-500 mt-1">
             <span>0%</span><span>limit {fmtPct(after.limit)}</span><span>130%</span>
@@ -810,7 +946,7 @@ export default function Home() {
                 <div className="hidden sm:block rounded-lg bg-neutral-900 p-1 border border-neutral-800 space-y-1">
                   {[0, 1, 2].map((r) => (
                     <div key={r} className="grid grid-cols-[44px_1fr_1fr] gap-1 items-stretch">
-                      <span className="flex items-center justify-center text-[9px] uppercase tracking-wide text-neutral-600">{SEASON_LABELS[r].slice(2)}</span>
+                      <span className="flex items-center justify-center text-[10px] uppercase tracking-wide text-neutral-600">{SEASON_LABELS[r].slice(2)}</span>
                       {WINDOWS.slice(r * 2, r * 2 + 2).map((w) => {
                         const n = incomings.filter((i) => i.window === w.id).length + sales.filter((s) => s.window === w.id).length + loansOut.filter((l) => l.window === w.id).length + loansIn.filter((l) => l.window === w.id).length;
                         return (
@@ -842,7 +978,22 @@ export default function Home() {
                 </div>
                 <div>
                   <Slider label="Revenue growth" value={Math.round(revenueGrowth * 100)} min={-10} max={15} step={1} display={`${revenueGrowth >= 0 ? "+" : ""}${Math.round(revenueGrowth * 100)}%/yr`} onChange={(v) => setRevenueGrowth(v / 100)} />
-                  <p className="text-[10px] text-neutral-600 mt-1">Base wages persist (renewals assumed); amortisation rolls off as contracts end.</p>
+                  <p className="text-[10px] text-neutral-600 mt-1">Amortisation rolls off as contracts end (accounting fact, both policies).</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-neutral-500 mb-2">Expiring contracts</p>
+                  <div className="flex gap-1">
+                    {([["renew", "Renew (keep wages)"], ["expire", "Expire (wages drop off)"]] as const).map(([k, label]) => (
+                      <button key={k} onClick={() => setWagePolicy(k)} className={`flex-1 px-2 py-1.5 rounded-md text-[11px] transition ${wagePolicy === k ? "bg-neutral-700 text-white" : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-neutral-600 mt-1">
+                    {wagePolicy === "renew"
+                      ? "Wages persist when contracts end — assumes renewal or like-for-like replacement."
+                      : "A player's wage drops off in the first season after his contract ends — no renewal modelled."}
+                  </p>
                 </div>
               </div>
 
@@ -912,9 +1063,9 @@ export default function Home() {
                           <input type="checkbox" checked={inc.isFree} onChange={(e) => updateIncoming(inc.id, { isFree: e.target.checked })} className="h-3.5 w-3.5 accent-emerald-500" />
                           Free / academy (no fee)
                         </label>
-                        <label className="flex items-center gap-1 text-xs text-neutral-500" title="Market value of the target (your estimate) — feeds the squad-value tracker">
-                          MV £<input type="number" value={inc.marketValue ?? (inc.isFree ? 0 : inc.fee)} min={0} onChange={(e) => updateIncoming(inc.id, { marketValue: Number(e.target.value) })} className="w-14 bg-neutral-800 rounded px-1 py-0.5 text-neutral-200 text-right border border-neutral-700" />m
-                        </label>
+                        <span className="flex items-center gap-1 text-xs text-neutral-500" title="Market value of the target (your estimate) — feeds the squad-value tracker">
+                          MV <MoneyInput value={inc.marketValue ?? (inc.isFree ? 0 : inc.fee)} onChange={(v) => updateIncoming(inc.id, { marketValue: v })} />
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -933,15 +1084,22 @@ export default function Home() {
                     const yearsAfter = windowYearOffset(s.window);
                     const bv = p.isAcademy ? 0 : Math.max(0, bookValueAt(p, asOf) - (p.fee > 0 ? (p.fee / Math.max(1, p.contractEndYear - p.signedYear)) * yearsAfter : 0));
                     const profit = s.saleFee - bv;
+                    const overMarket = p.marketValue > 0 && s.saleFee > 2 * p.marketValue;
                     return (
-                      <div key={s.name} className="flex items-center gap-2 text-xs bg-neutral-900 rounded px-2 py-1.5 border border-neutral-800">
-                        <select value={s.window} onChange={(e) => updateSale(s.name, { window: e.target.value as WindowId })} className={`border rounded text-[10px] px-1 py-0.5 ${WINDOW_BADGE[s.window]} bg-transparent`}>
-                          {WINDOWS.map((w) => <option key={w.id} value={w.id} className="bg-neutral-900 text-neutral-200">{w.short}</option>)}
-                        </select>
-                        <span className="text-neutral-300 flex-1 truncate">{s.name}</span>
-                        <label className="flex items-center gap-1 text-neutral-500">£<input type="number" value={s.saleFee} min={0} onChange={(e) => updateSale(s.name, { saleFee: Number(e.target.value) })} className="w-14 bg-neutral-800 rounded px-1 py-0.5 text-neutral-200 text-right" />m</label>
-                        <span className={profit >= 0 ? "text-emerald-400 w-16 text-right tabular-nums" : "text-red-400 w-16 text-right tabular-nums"}>{profit >= 0 ? "+" : ""}£{profit.toFixed(0)}m</span>
-                        <button onClick={() => toggleSale(p)} className="text-red-400 hover:text-red-300">✕</button>
+                      <div key={s.name} className="bg-neutral-900 rounded px-2 py-1.5 border border-neutral-800">
+                        <div className="flex items-center gap-2 text-xs">
+                          <select value={s.window} onChange={(e) => updateSale(s.name, { window: e.target.value as WindowId })} className={`border rounded text-[10px] px-1 py-0.5 ${WINDOW_BADGE[s.window]} bg-transparent`}>
+                            {WINDOWS.map((w) => <option key={w.id} value={w.id} className="bg-neutral-900 text-neutral-200">{w.short}</option>)}
+                          </select>
+                          <span className="text-neutral-300 flex-1 truncate">{s.name}</span>
+                          <span className="text-[10px] text-neutral-600 tabular-nums shrink-0" title="Transfermarkt-style market value estimate">mkt £{p.marketValue}m</span>
+                          <MoneyInput value={s.saleFee} onChange={(v) => updateSale(s.name, { saleFee: v })} warn={overMarket} />
+                          <span className={profit >= 0 ? "text-emerald-400 w-16 text-right tabular-nums" : "text-red-400 w-16 text-right tabular-nums"}>{profit >= 0 ? "+" : ""}£{profit.toFixed(0)}m</span>
+                          <button onClick={() => toggleSale(p)} className="text-red-400 hover:text-red-300">✕</button>
+                        </div>
+                        {overMarket && (
+                          <p className="mt-1 text-[10px] text-amber-400">Well above his £{p.marketValue}m market value — buyers rarely pay 2×. Keep it only to model a bidding war.</p>
+                        )}
                       </div>
                     );
                   })}
@@ -973,7 +1131,7 @@ export default function Home() {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <label className="flex items-center gap-1 text-xs text-neutral-500">Loan fee £<input type="number" value={l.loanFee} min={0} onChange={(e) => updateLoanOut(l.name, { loanFee: Number(e.target.value) })} className="w-12 bg-neutral-800 rounded px-1 py-0.5 text-neutral-200 text-right border border-neutral-700" />m</label>
+                          <span className="flex items-center gap-1 text-xs text-neutral-500">Loan fee <MoneyInput value={l.loanFee} onChange={(v) => updateLoanOut(l.name, { loanFee: v })} /></span>
                           <div className="flex-1"><Slider label="Wage covered by borrower" value={Math.round(l.wageCoveredPct * 100)} min={0} max={100} step={5} display={`${Math.round(l.wageCoveredPct * 100)}%`} onChange={(v) => updateLoanOut(l.name, { wageCoveredPct: v / 100 })} /></div>
                         </div>
                         <div className="flex items-center gap-2 text-xs">
@@ -984,7 +1142,7 @@ export default function Home() {
                           </select>
                           {l.buyType !== "none" && (
                             <>
-                              <label className="flex items-center gap-1 text-neutral-500">£<input type="number" value={l.buyPrice} min={0} onChange={(e) => updateLoanOut(l.name, { buyPrice: Number(e.target.value) })} className="w-14 bg-neutral-800 rounded px-1 py-0.5 text-neutral-200 text-right border border-neutral-700" />m</label>
+                              <MoneyInput value={l.buyPrice} onChange={(v) => updateLoanOut(l.name, { buyPrice: v })} />
                               {l.buyType === "option" && (
                                 <label className="flex items-center gap-1 text-neutral-400 cursor-pointer">
                                   <input type="checkbox" checked={l.assumeExercised} onChange={(e) => updateLoanOut(l.name, { assumeExercised: e.target.checked })} className="h-3 w-3 accent-emerald-500" />
@@ -1028,7 +1186,7 @@ export default function Home() {
                     </div>
                     <Slider label="Player wage" value={l.weeklyWage} min={0} max={600_000} step={5_000} display={`£${(l.weeklyWage / 1000).toFixed(0)}k/wk`} onChange={(v) => updateLoanIn(l.id, { weeklyWage: v })} />
                     <div className="flex items-center gap-3">
-                      <label className="flex items-center gap-1 text-xs text-neutral-500">Loan fee £<input type="number" value={l.loanFee} min={0} onChange={(e) => updateLoanIn(l.id, { loanFee: Number(e.target.value) })} className="w-12 bg-neutral-800 rounded px-1 py-0.5 text-neutral-200 text-right border border-neutral-700" />m</label>
+                      <span className="flex items-center gap-1 text-xs text-neutral-500">Loan fee <MoneyInput value={l.loanFee} onChange={(v) => updateLoanIn(l.id, { loanFee: v })} /></span>
                       <div className="flex-1"><Slider label="Wage share we pay" value={Math.round(l.wageSharePct * 100)} min={0} max={100} step={5} display={`${Math.round(l.wageSharePct * 100)}%`} onChange={(v) => updateLoanIn(l.id, { wageSharePct: v / 100 })} /></div>
                     </div>
                     <div className="flex items-center gap-2 text-xs flex-wrap">
@@ -1039,7 +1197,7 @@ export default function Home() {
                       </select>
                       {l.buyType !== "none" && (
                         <>
-                          <label className="flex items-center gap-1 text-neutral-500">£<input type="number" value={l.buyPrice} min={0} onChange={(e) => updateLoanIn(l.id, { buyPrice: Number(e.target.value) })} className="w-14 bg-neutral-800 rounded px-1 py-0.5 text-neutral-200 text-right border border-neutral-700" />m</label>
+                          <MoneyInput value={l.buyPrice} onChange={(v) => updateLoanIn(l.id, { buyPrice: v })} />
                           <label className="flex items-center gap-1 text-neutral-500"><input type="number" value={l.buyContract} min={1} max={7} onChange={(e) => updateLoanIn(l.id, { buyContract: Number(e.target.value) })} className="w-10 bg-neutral-800 rounded px-1 py-0.5 text-neutral-200 text-right border border-neutral-700" />y deal</label>
                           {l.buyType === "option" && (
                             <label className="flex items-center gap-1 text-neutral-400 cursor-pointer">
@@ -1160,6 +1318,17 @@ export default function Home() {
           </aside>
         </div>
 
+        {/* -------- Zone-crossing toast -------- */}
+        {zoneToast && (
+          <div className="fixed inset-x-0 bottom-20 lg:bottom-6 z-[60] flex justify-center pointer-events-none px-4">
+            <div className={`rounded-full border px-4 py-2 text-sm font-semibold shadow-2xl backdrop-blur bg-neutral-950/90 animate-[slideUp_200ms_ease-out] ${ZONE_STYLES[zoneToast.zone].border} ${ZONE_STATUS[zoneToast.zone].tone}`}>
+              {zoneToast.zone === "GREEN" && "✓ Compliant — back under the limit"}
+              {zoneToast.zone === "YELLOW" && (zoneToast.improved ? "Out of breach territory — now in the luxury levy zone" : "⚠ Over the 85% line — luxury levy zone")}
+              {zoneToast.zone === "RED" && "✗ Breach risk — this plan is over the red line"}
+            </div>
+          </div>
+        )}
+
         {/* -------- Mobile: sticky bottom SCR bar + slide-up sheet -------- */}
         {isMobile && (
           <>
@@ -1209,6 +1378,15 @@ export default function Home() {
   // =========================================================================
   if (step === "compliance") {
     const stat = ZONE_STATUS[after.zone];
+    // Key moves for the shareable result card — biggest first, max 5.
+    const keyMoves: { text: string; kind: "in" | "out" | "loan" }[] = [
+      ...incomings.map((i) => ({ text: `${i.label || "Signing"} ${i.isFree ? "(free)" : `£${i.fee}m`}`, kind: "in" as const, size: i.isFree ? 0 : i.fee })),
+      ...sales.map((s) => ({ text: `${s.name} sold £${s.saleFee}m`, kind: "out" as const, size: s.saleFee })),
+      ...loansOut.map((l) => ({ text: `${l.name} loaned out`, kind: "loan" as const, size: l.loanFee })),
+      ...loansIn.map((l) => ({ text: `${l.label || "Loan-in"} loaned in`, kind: "loan" as const, size: l.loanFee })),
+    ]
+      .sort((a, b) => b.size - a.size)
+      .slice(0, 5);
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-100">
         {flowHeader}
@@ -1236,33 +1414,65 @@ export default function Home() {
             })}
           </div>
 
-          {/* Headline result */}
-          <div className={`rounded-2xl border ${style.border} ${style.soft} p-6`}>
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-neutral-500">Projected SCR — {season.label}</p>
-                <p className={`text-6xl font-black tabular-nums ${style.text}`}>{fmtPct(after.scr)}</p>
-                <p className={`text-lg font-bold mt-1 ${stat.tone}`}>{after.zone === "GREEN" ? "✓ " : "⚠ "}{stat.label}</p>
+          {/* Headline result — styled as a screenshot-ready share card */}
+          <div className={`relative overflow-hidden rounded-2xl border ${style.border} ${style.soft}`}>
+            {/* Club-colour top strip */}
+            <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${accent.primary}, transparent 85%)` }} aria-hidden />
+            <div className="p-6">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <span className="inline-flex items-center gap-2 text-sm font-bold" style={{ color: accent.text }}>
+                  <span className="h-2.5 w-2.5 rounded-full ring-1 ring-neutral-700" style={{ background: accent.primary }} aria-hidden />
+                  {club.name}
+                </span>
+                <span className="text-xs text-neutral-500">{season.label} · {after.track === "UEFA" ? "UEFA 70% track" : "Premier League 85% track"}</span>
               </div>
-              <div className="text-right text-sm text-neutral-400 space-y-0.5">
-                <p>Baseline (no plan): <span className="tabular-nums text-neutral-200">{fmtPct(before.scr)}</span></p>
-                <p>Limit ({after.track === "UEFA" ? "UEFA" : "PL"}): <span className="tabular-nums text-neutral-200">{fmtPct(after.limit)}</span></p>
-                <p>Headroom: <span className={`tabular-nums font-semibold ${afterHeadroom >= 0 ? "text-emerald-400" : "text-red-400"}`}>{afterHeadroom >= 0 ? fmtM(afterHeadroom) : `−${fmtM(Math.abs(afterHeadroom))} over`}</span></p>
+
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-neutral-500">Projected SCR</p>
+                  <p className="flex items-baseline gap-3">
+                    <span className="text-2xl font-bold tabular-nums text-neutral-500 line-through decoration-neutral-700">{fmtPct(before.scr)}</span>
+                    <span className="text-neutral-600">→</span>
+                    <span className={`text-6xl font-black tabular-nums ${style.text}`}>{fmtPct(after.scr)}</span>
+                  </p>
+                  <p className={`text-lg font-bold mt-1 ${stat.tone}`}>{after.zone === "GREEN" ? "✓ " : "⚠ "}{stat.label}</p>
+                </div>
+                <div className="text-right text-sm text-neutral-400 space-y-0.5">
+                  <p>Limit ({after.track === "UEFA" ? "UEFA" : "PL"}): <span className="tabular-nums text-neutral-200">{fmtPct(after.limit)}</span></p>
+                  <p>Headroom: <span className={`tabular-nums font-semibold ${afterHeadroom >= 0 ? "text-emerald-400" : "text-red-400"}`}>{afterHeadroom >= 0 ? fmtM(afterHeadroom) : `−${fmtM(Math.abs(afterHeadroom))} over`}</span></p>
+                  <p>Squad value: <span className="tabular-nums text-neutral-200">{fmtM(mvEndOfPlan)}</span></p>
+                </div>
               </div>
-            </div>
-            <div className="relative mt-6 h-12 rounded-lg bg-neutral-800 overflow-hidden ring-1 ring-neutral-700">
-              <div className={`h-full ${style.bar} transition-all duration-300`} style={{ width: `${pct(after.scr)}%` }} />
-              <Marker left={pct(RULES.UEFA_THRESHOLD)} label="70% UEFA" />
-              <Marker left={pct(RULES.PL_GREEN_THRESHOLD)} label="85% PL" />
-              <Marker left={pct(RULES.PL_RED_THRESHOLD)} label="115% Red" />
-            </div>
-            {after.zone === "RED" && (
-              <p className="text-sm text-neutral-300 mt-4">
-                SCR is above the selected limit. This plan likely requires sales, cost reduction, allowance use, levy/settlement, or other mitigation.
-                {after.pointsDeduction > 0 && <span className="block text-[10px] text-neutral-500 mt-1 italic">* Illustrative sporting sanction if unmitigated: −{after.pointsDeduction} points.</span>}
+
+              {keyMoves.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  {keyMoves.map((m, i) => (
+                    <span key={i} className={`text-[11px] px-2 py-0.5 rounded-full border ${m.kind === "in" ? "border-emerald-700/50 bg-emerald-950/40 text-emerald-300" : m.kind === "out" ? "border-red-700/50 bg-red-950/40 text-red-300" : "border-sky-700/50 bg-sky-950/40 text-sky-300"}`}>
+                      {m.kind === "in" ? "↓ " : m.kind === "out" ? "↑ " : "⇄ "}{m.text}
+                    </span>
+                  ))}
+                  {totalMoves > keyMoves.length && <span className="text-[11px] px-2 py-0.5 rounded-full border border-neutral-700 text-neutral-500">+{totalMoves - keyMoves.length} more</span>}
+                </div>
+              )}
+
+              <div className="relative mt-6 h-12 rounded-lg bg-neutral-800 overflow-hidden ring-1 ring-neutral-700">
+                <div className={`h-full ${style.bar} transition-all duration-300`} style={{ width: `${pct(after.scr)}%` }} />
+                <Marker left={pct(RULES.UEFA_THRESHOLD)} label="70% UEFA" />
+                <Marker left={pct(RULES.PL_GREEN_THRESHOLD)} label="85% PL" />
+                <Marker left={pct(RULES.PL_RED_THRESHOLD)} label="115% Red" />
+              </div>
+              {after.zone === "RED" && (
+                <p className="text-sm text-neutral-300 mt-4">
+                  SCR is above the selected limit. This plan likely requires sales, cost reduction, allowance use, levy/settlement, or other mitigation.
+                  {after.pointsDeduction > 0 && <span className="block text-[10px] text-neutral-500 mt-1 italic">* Illustrative sporting sanction if unmitigated: −{after.pointsDeduction} points.</span>}
+                </p>
+              )}
+              {after.denominatorWarning && <p className="text-sm text-red-400 mt-3">Net player trading losses have wiped out the revenue base — sell before you buy.</p>}
+
+              <p className="mt-5 pt-3 border-t border-neutral-800/60 text-[10px] uppercase tracking-[0.18em] text-neutral-600">
+                Football Finance Machine · Squad Cost Ratio simulator
               </p>
-            )}
-            {after.denominatorWarning && <p className="text-sm text-red-400 mt-3">Net player trading losses have wiped out the revenue base — sell before you buy.</p>}
+            </div>
           </div>
 
           {/* Before vs After comparison */}
@@ -1532,6 +1742,29 @@ function CollapsibleCard({
       </div>
       {expanded && children}
     </div>
+  );
+}
+
+/**
+ * Consistent £-millions number input used everywhere a money figure is typed
+ * (sale fees, loan fees, buy prices, market values). `warn` turns it amber —
+ * used to flag figures far above a player's market value.
+ */
+function MoneyInput({ value, onChange, warn, width = "w-14" }: {
+  value: number; onChange: (v: number) => void; warn?: boolean; width?: string;
+}) {
+  return (
+    <label className={`flex items-center gap-1 text-xs shrink-0 ${warn ? "text-amber-400" : "text-neutral-500"}`}>
+      £
+      <input
+        type="number"
+        value={value}
+        min={0}
+        onChange={(e) => onChange(Math.max(0, Number(e.target.value)))}
+        className={`${width} bg-neutral-800 rounded px-1 py-0.5 text-right border transition-colors ${warn ? "border-amber-500 text-amber-300" : "border-neutral-700 text-neutral-200"}`}
+      />
+      m
+    </label>
   );
 }
 
