@@ -42,7 +42,9 @@ import { clubAccent } from "@/data/clubColors";
 import { solveClearingHouse, type ClearingResult, type ClearingSolution } from "@/utils/clearingHouse";
 import LineupBuilder, { type RosterEntry } from "@/components/LineupBuilder";
 import Onboarding from "@/components/Onboarding";
-import type { Lineup } from "@/utils/lineups";
+import ShareExport from "@/components/ShareExport";
+import { FORMATIONS, type Lineup } from "@/utils/lineups";
+import type { ShareData, SharePlayer } from "@/utils/shareImage";
 
 // ---------------------------------------------------------------------------
 // Style maps
@@ -215,6 +217,7 @@ export default function Home() {
 
   // Deal sheet shown before moving on to compliance.
   const [showDealSheet, setShowDealSheet] = useState(false);
+  const [showShareExport, setShowShareExport] = useState(false);
 
   // Mobile adaptations: `lg` is where the two-column transfers layout kicks in.
   const isMobile = useMediaQuery("(max-width: 1023px)");
@@ -620,6 +623,46 @@ export default function Home() {
   const dealSpend = dealRows.filter((r) => r.dir === "out").reduce((a, r) => a + r.amount, 0);
   const dealIncome = dealRows.filter((r) => r.dir === "in").reduce((a, r) => a + r.amount, 0);
   const netSpend = dealSpend - dealIncome;
+
+  // ---- Shareable social cards (lineup / deal sheet / SCR) -------------------
+  // Declared here (before any early return) so the hook order stays stable.
+  const shareData: ShareData = useMemo(() => {
+    const sAccent = clubAccent(clubId);
+    const rosterByKey = new Map(lineupRoster.map((r) => [r.key, r] as const));
+    const players: SharePlayer[] = [];
+    if (lineup) {
+      const slots = FORMATIONS[lineup.formation]?.slots ?? [];
+      lineup.slots.forEach((key, i) => {
+        const slot = slots[i];
+        const r = key ? rosterByKey.get(key) : undefined;
+        if (r && slot) players.push({ name: r.name, label: slot.label, role: r.position, x: slot.x, y: slot.y, tag: r.tag });
+      });
+    }
+    return {
+      clubName: club.name,
+      accentPrimary: sAccent.primary,
+      accentText: sAccent.text,
+      seasonLabel: season.label,
+      trackLabel: after.track === "UEFA" ? "UEFA 70% track" : "Premier League 85% track",
+      beforeScr: before.scr,
+      afterScr: after.scr,
+      limit: after.limit,
+      zone: after.zone,
+      headroom: afterHeadroom,
+      squadValue: mvEndOfPlan,
+      deals: dealRows.map((r) => ({
+        window: WINDOWS.find((w) => w.id === r.window)?.label ?? String(r.window),
+        text: r.text,
+        dir: r.dir,
+        amount: r.amount,
+      })),
+      dealSpend,
+      dealIncome,
+      netSpend,
+      formationName: lineup ? FORMATIONS[lineup.formation].name : "—",
+      players,
+    };
+  }, [clubId, club, season, after, before, afterHeadroom, mvEndOfPlan, dealRows, dealSpend, dealIncome, netSpend, lineup, lineupRoster]);
 
   /** "Review Compliance" — show the deal sheet first when there are dealings. */
   function reviewCompliance() {
@@ -1652,10 +1695,12 @@ export default function Home() {
             <button onClick={() => setStep("transfers")} className="rounded-lg px-5 py-2.5 text-sm font-medium border border-neutral-700 text-neutral-200 hover:border-neutral-500 transition">← Edit transfers</button>
             <button onClick={() => setStep("lineup")} className="rounded-lg px-5 py-2.5 text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition">Build lineup →</button>
             <button onClick={savePlan} className="rounded-lg px-5 py-2.5 text-sm font-medium border border-neutral-700 text-neutral-200 hover:border-neutral-500 transition">💾 Save plan</button>
-            <button onClick={copyShareLink} className="rounded-lg px-5 py-2.5 text-sm font-medium border border-neutral-700 text-neutral-200 hover:border-neutral-500 transition">{shareCopied ? "✓ Link copied" : "🔗 Share plan"}</button>
+            <button onClick={copyShareLink} className="rounded-lg px-5 py-2.5 text-sm font-medium border border-neutral-700 text-neutral-200 hover:border-neutral-500 transition">{shareCopied ? "✓ Link copied" : "🔗 Share link"}</button>
+            <button onClick={() => setShowShareExport(true)} className="rounded-lg px-5 py-2.5 text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition">📸 Export images</button>
             <button onClick={startOver} className="ml-auto rounded-lg px-5 py-2.5 text-sm font-medium text-neutral-400 hover:text-neutral-200 transition">Start over ↻</button>
           </div>
         </main>
+        {showShareExport && <ShareExport data={shareData} onClose={() => setShowShareExport(false)} />}
       </div>
     );
   }
@@ -1699,7 +1744,8 @@ export default function Home() {
         </div>
 
         <div className="mt-6 flex flex-wrap gap-3">
-          <button onClick={copyShareLink} className="rounded-lg px-5 py-2.5 text-sm font-medium border border-neutral-700 text-neutral-200 hover:border-neutral-500 transition">{shareCopied ? "✓ Link copied" : "🔗 Share plan"}</button>
+          <button onClick={() => setShowShareExport(true)} className="rounded-lg px-5 py-2.5 text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition">📸 Export images</button>
+          <button onClick={copyShareLink} className="rounded-lg px-5 py-2.5 text-sm font-medium border border-neutral-700 text-neutral-200 hover:border-neutral-500 transition">{shareCopied ? "✓ Link copied" : "🔗 Share link"}</button>
           <button onClick={savePlan} className="rounded-lg px-5 py-2.5 text-sm font-medium border border-neutral-700 text-neutral-200 hover:border-neutral-500 transition">💾 Save plan</button>
           <button onClick={startOver} className="ml-auto rounded-lg px-5 py-2.5 text-sm font-medium text-neutral-400 hover:text-neutral-200 transition">Start over ↻</button>
         </div>
@@ -1708,6 +1754,7 @@ export default function Home() {
       {showLineups && (
         <LineupBuilder roster={lineupRoster} initial={lineup} clubName={club.shortName} onSave={(l) => setLineup(l)} onClose={() => setShowLineups(false)} />
       )}
+      {showShareExport && <ShareExport data={shareData} onClose={() => setShowShareExport(false)} />}
     </div>
   );
 }
