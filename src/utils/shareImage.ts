@@ -103,10 +103,10 @@ const C = {
   green: "#34d399",
 };
 
-const ZONE: Record<ShareZone, { color: string; soft: string; label: string }> = {
-  GREEN: { color: "#10b981", soft: "#0b3b2e", label: "Compliant" },
-  YELLOW: { color: "#f59e0b", soft: "#3d2f08", label: "Luxury levy zone" },
-  RED: { color: "#ef4444", soft: "#3d1414", label: "Regulatory breach risk" },
+const ZONE: Record<ShareZone, { color: string; light: string; soft: string; label: string }> = {
+  GREEN: { color: "#10b981", light: "#34d399", soft: "#0b3b2e", label: "Compliant" },
+  YELLOW: { color: "#f59e0b", light: "#fbbf24", soft: "#3d2f08", label: "Luxury levy zone" },
+  RED: { color: "#ef4444", light: "#f87171", soft: "#3d1414", label: "Regulatory breach risk" },
 };
 
 const ROLE_COLOR: Record<SharePlayerRole, string> = {
@@ -271,12 +271,18 @@ function drawPitch(ctx: Ctx, x: number, y: number, w: number, h: number) {
   ctx.restore();
 }
 
+// Compact player-node footprint (keeps vertical stacks from colliding).
+const NODE_R = 26;              // disc radius
+const NAME_H = 30;             // surname plate height
+const PILL_H = 24;            // backup pill height
+const NAME_GAP = 3, PILL_GAP = 3;
+
 function drawPlayer(ctx: Ctx, p: SharePlayer, px: number, py: number) {
-  const r = 30;
-  // Shadow.
+  const r = NODE_R;
+  // Shadow + fill.
   ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.45)";
-  ctx.shadowBlur = 10;
+  ctx.shadowColor = "rgba(0,0,0,0.5)";
+  ctx.shadowBlur = 12;
   ctx.shadowOffsetY = 4;
   ctx.beginPath();
   ctx.arc(px, py, r, 0, Math.PI * 2);
@@ -292,109 +298,129 @@ function drawPlayer(ctx: Ctx, p: SharePlayer, px: number, py: number) {
   // Slot label inside.
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  font(ctx, "black", 18);
+  font(ctx, "black", 16);
   ctx.fillStyle = "#ffffff";
   ctx.fillText(p.label, px, py + 1);
   // Tag dot (signing / loan-in).
   if (p.tag === "signing" || p.tag === "loan-in") {
     ctx.beginPath();
-    ctx.arc(px + r - 4, py - r + 4, 8, 0, Math.PI * 2);
+    ctx.arc(px + r - 3, py - r + 3, 7, 0, Math.PI * 2);
     ctx.fillStyle = p.tag === "signing" ? C.green : "#38bdf8";
     ctx.fill();
     ctx.lineWidth = 2;
     ctx.strokeStyle = "#0a0a0a";
     ctx.stroke();
   }
-  // Surname below, with a dark plate for legibility.
+  // Surname plate.
   const label = surname(p.name);
-  font(ctx, "bold", 25);
-  const tw = Math.min(ctx.measureText(label).width, 180);
-  const plateW = tw + 20;
-  const plateY = py + r + 6;
-  ctx.fillStyle = "rgba(10,10,10,0.72)";
-  roundRect(ctx, px - plateW / 2, plateY, plateW, 34, 8);
+  font(ctx, "bold", 23);
+  const tw = Math.min(ctx.measureText(label).width, 170);
+  const plateW = tw + 18;
+  const plateY = py + r + NAME_GAP;
+  ctx.fillStyle = "rgba(8,10,14,0.82)";
+  roundRect(ctx, px - plateW / 2, plateY, plateW, NAME_H, 8);
   ctx.fill();
   ctx.fillStyle = "#ffffff";
-  ctx.textBaseline = "middle";
-  ctx.fillText(ellipsize(ctx, label, 180), px, plateY + 18);
+  ctx.fillText(ellipsize(ctx, label, 170), px, plateY + NAME_H / 2 + 1);
 
-  // Primary backup pill (matches the in-app "⇄ Name +N" chip).
+  // Primary backup pill.
   const subs = p.subs ?? [];
   if (subs.length > 0) {
     const sub = surname(subs[0]);
-    const extra = subs.length > 1 ? `  +${subs.length - 1}` : "";
-    font(ctx, "bold", 19);
-    const textW = Math.min(ctx.measureText(sub + extra).width, 150);
-    const pad = 12, dotR = 4, gap = 8, pillH = 28;
+    const extra = subs.length > 1 ? ` +${subs.length - 1}` : "";
+    font(ctx, "bold", 17);
+    const textW = Math.min(ctx.measureText(sub + extra).width, 140);
+    const pad = 10, dotR = 4, gap = 7;
     const pillW = pad + dotR * 2 + gap + textW + pad;
     const pillX = px - pillW / 2;
-    const pillY = plateY + 34 + 6;
-    ctx.fillStyle = "rgba(56,189,248,0.16)";
-    roundRect(ctx, pillX, pillY, pillW, pillH, 9);
+    const pillY = plateY + NAME_H + PILL_GAP;
+    ctx.fillStyle = "rgba(56,189,248,0.18)";
+    roundRect(ctx, pillX, pillY, pillW, PILL_H, 8);
     ctx.fill();
-    ctx.strokeStyle = "rgba(56,189,248,0.5)";
+    ctx.strokeStyle = "rgba(56,189,248,0.55)";
     ctx.lineWidth = 1.5;
-    roundRect(ctx, pillX, pillY, pillW, pillH, 9);
+    roundRect(ctx, pillX, pillY, pillW, PILL_H, 8);
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(pillX + pad + dotR, pillY + pillH / 2, dotR, 0, Math.PI * 2);
+    ctx.arc(pillX + pad + dotR, pillY + PILL_H / 2, dotR, 0, Math.PI * 2);
     ctx.fillStyle = "#38bdf8";
     ctx.fill();
-    ctx.fillStyle = "#7dd3fc";
+    ctx.fillStyle = "#bae6fd";
     ctx.textAlign = "left";
-    ctx.fillText(ellipsize(ctx, sub + extra, 150), pillX + pad + dotR * 2 + gap, pillY + pillH / 2 + 1);
+    ctx.fillText(ellipsize(ctx, sub + extra, 140), pillX + pad + dotR * 2 + gap, pillY + PILL_H / 2 + 1);
   }
   ctx.textAlign = "left";
 }
 
-/** Wrapped chips of leftover players under the pitch. */
-function drawLeftovers(ctx: Ctx, items: ShareLeftover[], x: number, y: number, w: number, maxRows: number) {
+// Leftover-chip geometry, shared by the measure + draw passes.
+const CHIP_H = 38, CHIP_GAP = 11, CHIP_ROW_GAP = 11, CHIP_PAD = 13, CHIP_DOT = 5, CHIP_DGAP = 8;
+const LEFTOVER_LABEL_H = 30;
+
+function chipWidth(ctx: Ctx, name: string): number {
+  font(ctx, 600, 21);
+  const tw = Math.min(ctx.measureText(surname(name)).width, 180);
+  return CHIP_PAD + CHIP_DOT * 2 + CHIP_DGAP + tw + CHIP_PAD;
+}
+
+/** Rows the leftover chips would occupy in width `w` (uncapped). */
+function leftoverRowCount(ctx: Ctx, items: ShareLeftover[], w: number): number {
+  let rows = 1, cx = 0;
+  for (const it of items) {
+    const cw = chipWidth(ctx, it.name);
+    if (cx > 0 && cx + cw > w) { rows++; cx = 0; }
+    cx += cw + CHIP_GAP;
+  }
+  return items.length ? rows : 0;
+}
+
+/** Total height of the leftover strip for `rows` rows. */
+function leftoverHeight(rows: number): number {
+  return LEFTOVER_LABEL_H + rows * CHIP_H + (rows - 1) * CHIP_ROW_GAP;
+}
+
+/** Wrapped chips of leftover players under the pitch. `topY` is the strip's top. */
+function drawLeftovers(ctx: Ctx, items: ShareLeftover[], x: number, topY: number, w: number, maxRows: number) {
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  font(ctx, "bold", 22);
+  font(ctx, "bold", 21);
   setTracking(ctx, 2);
   ctx.fillStyle = C.dim;
-  ctx.fillText(`OTHER SQUAD PLAYERS · ${items.length}`, x, y);
+  ctx.fillText(`OTHER SQUAD PLAYERS · ${items.length}`, x, topY + 12);
   setTracking(ctx, 0);
 
-  const chipH = 40, chipGap = 12, rowGap = 12, pad = 14, dotR = 5, dgap = 8;
-  let cx = x, cy = y + 26;
-  let row = 0;
-  font(ctx, 600, 22);
+  let cx = x, cy = topY + LEFTOVER_LABEL_H, row = 0;
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
-    const nm = surname(it.name);
-    const tw = Math.min(ctx.measureText(nm).width, 190);
-    const chipW = pad + dotR * 2 + dgap + tw + pad;
-    if (cx + chipW > x + w) {
+    const cw = chipWidth(ctx, it.name);
+    if (cx > x && cx + cw > x + w) {
       row++;
       if (row >= maxRows) {
         const remaining = items.length - i;
         if (remaining > 0) {
           ctx.fillStyle = C.dim;
-          font(ctx, "bold", 22);
-          ctx.fillText(`+${remaining} more`, cx, cy + chipH / 2);
+          font(ctx, "bold", 21);
+          ctx.fillText(`+${remaining} more`, cx, cy + CHIP_H / 2);
         }
         return;
       }
       cx = x;
-      cy += chipH + rowGap;
+      cy += CHIP_H + CHIP_ROW_GAP;
     }
     ctx.fillStyle = C.panel;
-    roundRect(ctx, cx, cy, chipW, chipH, 10);
+    roundRect(ctx, cx, cy, cw, CHIP_H, 10);
     ctx.fill();
     ctx.strokeStyle = C.panelLine;
     ctx.lineWidth = 1.5;
-    roundRect(ctx, cx, cy, chipW, chipH, 10);
+    roundRect(ctx, cx, cy, cw, CHIP_H, 10);
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(cx + pad + dotR, cy + chipH / 2, dotR, 0, Math.PI * 2);
+    ctx.arc(cx + CHIP_PAD + CHIP_DOT, cy + CHIP_H / 2, CHIP_DOT, 0, Math.PI * 2);
     ctx.fillStyle = ROLE_COLOR[it.role];
     ctx.fill();
     ctx.fillStyle = C.text;
-    font(ctx, 600, 22);
-    ctx.fillText(ellipsize(ctx, nm, 190), cx + pad + dotR * 2 + dgap, cy + chipH / 2 + 1);
-    cx += chipW + chipGap;
+    font(ctx, 600, 21);
+    ctx.fillText(ellipsize(ctx, surname(it.name), 180), cx + CHIP_PAD + CHIP_DOT * 2 + CHIP_DGAP, cy + CHIP_H / 2 + 1);
+    cx += cw + CHIP_GAP;
   }
 }
 
@@ -415,8 +441,16 @@ function renderLineup(ctx: Ctx, d: ShareData) {
   const hasBench = leftovers.length > 0;
   const px = 40, py = 150;
   const pw = W - 80;
-  // Reserve room under the pitch for the leftovers strip when there is one.
-  const ph = hasBench ? 830 : 1010;
+  const benchBottom = 1234;      // bench sits just above the footer
+  const maxBenchRows = 2;
+
+  // Bench height is measured, not fixed — so the pitch reclaims every spare
+  // pixel and players spread out enough to avoid overlaps.
+  const benchRows = hasBench ? Math.min(maxBenchRows, leftoverRowCount(ctx, leftovers, pw - 32)) : 0;
+  const benchH = hasBench ? leftoverHeight(benchRows) : 0;
+  const benchTop = benchBottom - benchH;
+  const pitchBottom = hasBench ? benchTop - 22 : benchBottom;
+  const ph = pitchBottom - py;
   drawPitch(ctx, px, py, pw, ph);
 
   if (d.players.length === 0) {
@@ -430,18 +464,20 @@ function renderLineup(ctx: Ctx, d: ShareData) {
     return;
   }
 
-  // Inner play area — generous top/bottom insets so slot labels and the GK's
-  // backup pill stay inside the touchline.
-  const topInset = 52, bottomInset = 96, sideInset = 60;
+  // Inner play area. Top inset clears the highest disc; bottom inset leaves room
+  // for the GK's name + sub pill inside the touchline.
+  const topInset = 42, bottomInset = 78, sideInset = 46;
   const fieldX = px + sideInset, fieldY = py + topInset;
   const fieldW = pw - sideInset * 2, fieldH = ph - topInset - bottomInset;
-  for (const p of d.players) {
+  // Draw upper rows first so lower discs overlap the pills above them cleanly.
+  const ordered = [...d.players].sort((a, b) => a.y - b.y);
+  for (const p of ordered) {
     const cx = fieldX + (p.x / 100) * fieldW;
     const cy = fieldY + (p.y / 100) * fieldH;
     drawPlayer(ctx, p, cx, cy);
   }
 
-  if (hasBench) drawLeftovers(ctx, leftovers, px + 16, py + ph + 42, pw - 32, 3);
+  if (hasBench) drawLeftovers(ctx, leftovers, px + 16, benchTop, pw - 32, maxBenchRows);
   footer(ctx);
 }
 
@@ -625,114 +661,205 @@ function renderScr(ctx: Ctx, d: ShareData) {
   ctx.fillStyle = C.dim;
   ctx.fillText(d.trackLabel, 84, 120);
 
-  // Hero panel.
-  const hx = left, hy = 168, hw = width, hh = 470;
+  const improved = d.afterScr <= d.beforeScr;
+  const deltaPp = Math.abs((d.afterScr - d.beforeScr) * 100);
+
+  // ---- Hero panel (zone-tinted, soft glow) ----
+  const hx = left, hy = 158, hw = width, hh = 560;
+  ctx.save();
+  ctx.shadowColor = z.color + "66";
+  ctx.shadowBlur = 34;
   ctx.fillStyle = z.soft;
-  roundRect(ctx, hx, hy, hw, hh, 24);
+  roundRect(ctx, hx, hy, hw, hh, 26);
   ctx.fill();
+  ctx.restore();
   ctx.strokeStyle = z.color;
   ctx.lineWidth = 2;
-  roundRect(ctx, hx, hy, hw, hh, 24);
+  roundRect(ctx, hx, hy, hw, hh, 26);
   ctx.stroke();
 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  font(ctx, "bold", 24);
-  setTracking(ctx, 2);
+  font(ctx, "bold", 23);
+  setTracking(ctx, 3);
   ctx.fillStyle = C.muted;
-  ctx.fillText("PROJECTED SQUAD COST RATIO", W / 2, hy + 52);
+  ctx.fillText("PROJECTED SQUAD COST RATIO", W / 2, hy + 46);
   setTracking(ctx, 0);
 
-  // Before -> After row.
-  const rowY = hy + 168;
-  font(ctx, "bold", 66);
-  const beforeStr = fmtPct(d.beforeScr);
-  ctx.fillStyle = C.faint;
-  const bx = W / 2 - 210;
-  ctx.fillText(beforeStr, bx, rowY);
-  // strikethrough
-  const bw = ctx.measureText(beforeStr).width;
-  ctx.strokeStyle = C.faint;
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.moveTo(bx - bw / 2, rowY);
-  ctx.lineTo(bx + bw / 2, rowY);
-  ctx.stroke();
-  // arrow
-  font(ctx, "bold", 54);
+  // "was 83.6%" + delta badge, centred (no strikethrough overlap).
+  const wasStr = `was ${fmtPct(d.beforeScr)}`;
+  const deltaStr = `${improved ? "−" : "+"}${deltaPp.toFixed(1)}pp`;
+  font(ctx, 600, 24);
+  const wasW = ctx.measureText(wasStr).width;
+  font(ctx, "black", 22);
+  const dTextW = ctx.measureText(deltaStr).width;
+  const badgeW = dTextW + 28;
+  const groupGap = 16;
+  const groupW = wasW + groupGap + badgeW;
+  const gStart = W / 2 - groupW / 2;
+  const rowWasY = hy + 96;
+  ctx.textAlign = "left";
+  font(ctx, 600, 24);
   ctx.fillStyle = C.dim;
-  ctx.fillText("→", W / 2 - 20, rowY);
-  // after (hero)
-  font(ctx, "black", 130);
-  ctx.fillStyle = z.color;
-  ctx.fillText(fmtPct(d.afterScr), W / 2 + 130, rowY + 4);
-
-  // Zone status.
-  font(ctx, "black", 40);
-  ctx.fillStyle = z.color;
-  ctx.fillText(`${d.zone === "GREEN" ? "✓ " : "⚠ "}${z.label}`, W / 2, hy + 300);
-
-  // SCR bar with threshold markers.
-  const barX = hx + 40, barY = hy + 360, barW = hw - 80, barH = 40;
-  const barMax = 1.3;
-  ctx.fillStyle = "#262626";
-  roundRect(ctx, barX, barY, barW, barH, 10);
+  ctx.fillText(wasStr, gStart, rowWasY);
+  const badgeX = gStart + wasW + groupGap;
+  ctx.fillStyle = improved ? "rgba(52,211,153,0.16)" : "rgba(248,113,113,0.16)";
+  roundRect(ctx, badgeX, rowWasY - 20, badgeW, 40, 12);
   ctx.fill();
-  const fillW = Math.max(0, Math.min(1, d.afterScr / barMax)) * barW;
-  ctx.save();
-  roundRect(ctx, barX, barY, barW, barH, 10);
-  ctx.clip();
+  font(ctx, "black", 22);
+  ctx.fillStyle = improved ? C.green : C.red;
+  ctx.textAlign = "center";
+  ctx.fillText(deltaStr, badgeX + badgeW / 2, rowWasY + 1);
+
+  // Hero number.
+  ctx.textAlign = "center";
+  font(ctx, "black", 150);
   ctx.fillStyle = z.color;
-  ctx.fillRect(barX, barY, fillW, barH);
+  ctx.fillText(fmtPct(d.afterScr), W / 2, hy + 220);
+
+  // Zone verdict.
+  font(ctx, "black", 38);
+  ctx.fillStyle = z.color;
+  ctx.fillText(`${d.zone === "GREEN" ? "✓ " : "⚠ "}${z.label}`, W / 2, hy + 328);
+
+  // ---- Premium threshold meter ----
+  const barX = hx + 44, barW = hw - 88, barH = 46, barY = hy + 420;
+  const barMax = 1.3;
+  const clampFrac = (v: number) => Math.max(0, Math.min(1, v / barMax));
+  // Track.
+  ctx.fillStyle = "#20242e";
+  roundRect(ctx, barX, barY, barW, barH, barH / 2);
+  ctx.fill();
+  // Gradient fill (glowing).
+  const fillW = Math.max(barH, clampFrac(d.afterScr) * barW);
+  ctx.save();
+  roundRect(ctx, barX, barY, barW, barH, barH / 2);
+  ctx.clip();
+  const g = ctx.createLinearGradient(barX, 0, barX + fillW, 0);
+  g.addColorStop(0, z.light);
+  g.addColorStop(1, z.color);
+  ctx.shadowColor = z.color + "aa";
+  ctx.shadowBlur = 22;
+  ctx.fillStyle = g;
+  roundRect(ctx, barX, barY, fillW, barH, barH / 2);
+  ctx.fill();
   ctx.restore();
-  // markers
-  const marks: [number, string][] = [[0.7, "70%"], [0.85, "85%"], [1.15, "115%"]];
+  // Threshold ticks + labels.
+  const marks: [number, string][] = [[0.7, "70"], [0.85, "85"], [1.15, "115"]];
   ctx.textAlign = "center";
   for (const [v, lbl] of marks) {
-    const mx = barX + (v / barMax) * barW;
-    ctx.strokeStyle = "rgba(255,255,255,0.55)";
+    const mx = barX + clampFrac(v) * barW;
+    ctx.strokeStyle = "rgba(255,255,255,0.45)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(mx, barY - 4);
-    ctx.lineTo(mx, barY + barH + 4);
+    ctx.moveTo(mx, barY - 6);
+    ctx.lineTo(mx, barY + barH + 6);
     ctx.stroke();
     font(ctx, "bold", 18);
     ctx.fillStyle = C.dim;
-    ctx.fillText(lbl, mx, barY + barH + 20);
+    ctx.textBaseline = "top";
+    ctx.fillText(`${lbl}%`, mx, barY + barH + 12);
+    ctx.textBaseline = "middle";
   }
+  // Current-position knob.
+  const knobX = barX + clampFrac(d.afterScr) * barW;
+  const knobR = barH / 2 + 5;
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.5)";
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  ctx.arc(knobX, barY + barH / 2, knobR, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.restore();
+  ctx.beginPath();
+  ctx.arc(knobX, barY + barH / 2, knobR - 7, 0, Math.PI * 2);
+  ctx.fillStyle = z.color;
+  ctx.fill();
   ctx.textAlign = "left";
 
-  // Metric tiles below the hero.
-  const ty = hy + hh + 30;
-  const th = 150;
+  // ---- Metric tiles ----
+  const ty = hy + hh + 26;
+  const th = 148;
   const gap = 20;
   const tw = (width - gap * 2) / 3;
   const headOver = d.headroom < 0;
   statBox(ctx, left, ty, tw, th, "Limit", fmtPct(d.limit), C.text);
-  statBox(
-    ctx,
-    left + tw + gap,
-    ty,
-    tw,
-    th,
-    headOver ? "Over By" : "Headroom",
-    fmtM(Math.abs(d.headroom)),
-    headOver ? C.red : C.green,
-  );
+  statBox(ctx, left + tw + gap, ty, tw, th, headOver ? "Over By" : "Headroom", fmtM(Math.abs(d.headroom)), headOver ? C.red : C.green);
   statBox(ctx, left + (tw + gap) * 2, ty, tw, th, "Squad Value", fmtM(d.squadValue), C.text);
 
-  // Moves summary strip.
+  // ---- Before vs After comparison bars ----
+  const cy = ty + th + 24;
+  const chH = 236;
+  ctx.fillStyle = C.panel;
+  roundRect(ctx, left, cy, width, chH, 18);
+  ctx.fill();
+  ctx.strokeStyle = C.panelLine;
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, left, cy, width, chH, 18);
+  ctx.stroke();
+  const pad = 24;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  font(ctx, "bold", 20);
+  setTracking(ctx, 2);
+  ctx.fillStyle = C.dim;
+  ctx.fillText("BEFORE vs AFTER PLAN", left + pad, cy + 30);
+  setTracking(ctx, 0);
+
+  const cbX = left + pad + 120;
+  const cbW = width - pad * 2 - 120 - 130;
+  const limitX = cbX + clampFrac(d.limit) * cbW;
+  const drawCmp = (rowY: number, tag: string, val: number, color: string) => {
+    font(ctx, "bold", 24);
+    ctx.fillStyle = C.muted;
+    ctx.textAlign = "left";
+    ctx.fillText(tag, left + pad, rowY);
+    // track
+    ctx.fillStyle = "#20242e";
+    roundRect(ctx, cbX, rowY - 16, cbW, 32, 16);
+    ctx.fill();
+    // fill
+    ctx.save();
+    roundRect(ctx, cbX, rowY - 16, cbW, 32, 16);
+    ctx.clip();
+    ctx.fillStyle = color;
+    ctx.fillRect(cbX, rowY - 16, Math.max(32, clampFrac(val) * cbW), 32);
+    ctx.restore();
+    // value
+    font(ctx, "black", 26);
+    ctx.fillStyle = color;
+    ctx.textAlign = "left";
+    ctx.fillText(fmtPct(val), cbX + cbW + 20, rowY);
+  };
+  drawCmp(cy + 108, "Before", d.beforeScr, C.dim);
+  drawCmp(cy + 172, "After", d.afterScr, z.color);
+  // Limit reference line across both bars.
+  ctx.strokeStyle = "rgba(255,255,255,0.5)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.moveTo(limitX, cy + 78);
+  ctx.lineTo(limitX, cy + 196);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  font(ctx, "bold", 16);
+  ctx.fillStyle = C.dim;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(`LIMIT ${fmtPct(d.limit)}`, limitX, cy + 74);
+
+  // ---- Plan summary line ----
   const inCount = d.deals.filter((x) => x.dir === "out").length;
   const outCount = d.deals.filter((x) => x.dir === "in").length;
-  const sy = ty + th + 34;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  font(ctx, "bold", 26);
+  font(ctx, "bold", 25);
   ctx.fillStyle = C.muted;
   ctx.fillText(
     `${inCount} in · ${outCount} out · net ${d.netSpend >= 0 ? fmtM(d.netSpend) + " spend" : fmtM(Math.abs(d.netSpend)) + " income"}`,
     W / 2,
-    sy,
+    cy + chH + 40,
   );
   ctx.textAlign = "left";
 
