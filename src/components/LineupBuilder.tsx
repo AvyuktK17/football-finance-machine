@@ -17,7 +17,7 @@
  * names — no external player data is introduced.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FORMATIONS,
   FORMATION_IDS,
@@ -78,6 +78,30 @@ const TAG_BADGE: Record<RosterEntry["tag"], string | null> = { squad: null, sign
 const lastName = (name: string) => name.split(" ").pop() ?? name;
 const ROLE_FILTERS: ("ALL" | PlayerPosition)[] = ["ALL", "GK", "DF", "MF", "FW"];
 
+/**
+ * Font size (px) that lets `name` fit on one line inside a circle of
+ * `circlePx` diameter. Uppercase font-black chars are ≈0.62em wide; ~82% of
+ * the diameter is usable at the circle's vertical middle.
+ */
+function fitNameSize(name: string, circlePx: number): number {
+  const usable = circlePx * 0.82;
+  const est = usable / (Math.max(1, name.length) * 0.62);
+  return Math.max(6.5, Math.min(11, est));
+}
+
+/** SSR-safe media query (false on server + first client render). */
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
+    onChange();
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, [query]);
+  return matches;
+}
+
 export default function LineupBuilder({
   roster,
   initial,
@@ -102,6 +126,9 @@ export default function LineupBuilder({
   const [configSlot, setConfigSlot] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<"ALL" | PlayerPosition>("ALL");
+  // Below `sm` the pitch nodes are 64px (vs 80px) — used to fit name text.
+  const isMobile = useMediaQuery("(max-width: 639px)");
+  const circlePx = isMobile ? 64 : 80;
 
   const formation = FORMATIONS[lineup.formation];
   const starterKeys = useMemo(() => new Set(lineup.slots.filter(Boolean) as string[]), [lineup]);
@@ -311,11 +338,18 @@ export default function LineupBuilder({
                           {entry ? (
                             <>
                               <div className={`absolute inset-0 bg-gradient-to-tr ${getPlayerGradient(entry.position)} opacity-20`} />
-                              <div className="z-10 mt-2.5 flex flex-col items-center">
+                              {/* Mobile: no rating badge (no room) — flag + name centred,
+                                  name font auto-sized to fit the circle on one line. */}
+                              <div className="z-10 mt-0.5 sm:mt-2.5 flex flex-col items-center">
                                 <span className="text-xs leading-none">{getPlayerFlag(entry.name)}</span>
-                                <span className="tracking-wide text-[9px] sm:text-[10px] mt-0.5 font-black uppercase text-gray-200 truncate max-w-[50px] sm:max-w-[60px] leading-tight">{lastName(entry.name)}</span>
+                                <span
+                                  className="tracking-wide mt-0.5 font-black uppercase text-gray-200 whitespace-nowrap leading-tight"
+                                  style={{ fontSize: `${fitNameSize(lastName(entry.name), circlePx)}px` }}
+                                >
+                                  {lastName(entry.name)}
+                                </span>
                               </div>
-                              <div className="absolute bottom-1.5 text-[8px] sm:text-[9px] font-bold text-emerald-400 bg-black/75 px-1 rounded z-20">★ {getPlayerRating(entry.marketValue)}</div>
+                              <div className="hidden sm:block absolute bottom-1.5 text-[9px] font-bold text-emerald-400 bg-black/75 px-1 rounded z-20">★ {getPlayerRating(entry.marketValue)}</div>
                             </>
                           ) : (
                             <span className="text-lg text-gray-500 group-hover:text-gray-300 transition">＋</span>
@@ -324,19 +358,22 @@ export default function LineupBuilder({
                       </div>
                     </div>
 
-                    <div className="mt-1.5 flex flex-col items-center gap-1 w-24">
+                    {/* Mobile: the name lives inside the circle, so the duplicate
+                        name pill and the "+ Add sub" hint are desktop-only; a
+                        compact backup pill still shows when subs exist. */}
+                    <div className="mt-1 sm:mt-1.5 flex flex-col items-center gap-1 w-24">
                       {entry && (
-                        <div className="px-2 py-0.5 bg-black/85 border border-[#232a3d] text-gray-200 text-[9px] font-medium rounded text-center truncate max-w-full">{lastName(entry.name)}</div>
+                        <div className="hidden sm:block px-2 py-0.5 bg-black/85 border border-[#232a3d] text-gray-200 text-[9px] font-medium rounded text-center truncate max-w-full">{lastName(entry.name)}</div>
                       )}
                       {entry && (
                         primaryBackup ? (
-                          <div className="px-2 py-0.5 bg-[#121622] border border-cyan-500/20 text-[9px] text-cyan-300 rounded-full flex items-center gap-1 font-bold max-w-full">
+                          <div className="px-1.5 sm:px-2 py-0.5 bg-[#121622] border border-cyan-500/20 text-[8px] sm:text-[9px] text-cyan-300 rounded-full flex items-center gap-1 font-bold max-w-full">
                             <span className="shrink-0">⇄</span>
-                            <span className="truncate max-w-[55px]">{lastName(primaryBackup.name)}</span>
+                            <span className="truncate max-w-[44px] sm:max-w-[55px]">{lastName(primaryBackup.name)}</span>
                             {backups.length > 1 && <span className="text-[8px] px-1 bg-cyan-900/40 text-cyan-200 rounded">+{backups.length - 1}</span>}
                           </div>
                         ) : (
-                          <div className="px-2 py-0.5 bg-black/40 border border-[#1b2234] text-[8px] text-gray-500 rounded-full flex items-center gap-0.5">＋ Add sub</div>
+                          <div className="hidden sm:flex px-2 py-0.5 bg-black/40 border border-[#1b2234] text-[8px] text-gray-500 rounded-full items-center gap-0.5">＋ Add sub</div>
                         )
                       )}
                     </div>
