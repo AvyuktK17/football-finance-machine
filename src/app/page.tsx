@@ -630,14 +630,25 @@ export default function Home() {
     const sAccent = clubAccent(clubId);
     const rosterByKey = new Map(lineupRoster.map((r) => [r.key, r] as const));
     const players: SharePlayer[] = [];
+    const assigned = new Set<string>();
     if (lineup) {
       const slots = FORMATIONS[lineup.formation]?.slots ?? [];
       lineup.slots.forEach((key, i) => {
         const slot = slots[i];
         const r = key ? rosterByKey.get(key) : undefined;
-        if (r && slot) players.push({ name: r.name, label: slot.label, role: r.position, x: slot.x, y: slot.y, tag: r.tag });
+        if (r && slot) {
+          const subs = (lineup.subs[i] ?? [])
+            .map((k) => rosterByKey.get(k)?.name)
+            .filter((n): n is string => !!n);
+          players.push({ name: r.name, label: slot.label, role: r.position, x: slot.x, y: slot.y, tag: r.tag, subs });
+        }
       });
+      lineup.slots.forEach((k) => k && assigned.add(k));
+      lineup.subs.forEach((arr) => arr.forEach((k) => assigned.add(k)));
     }
+    const leftovers = lineup
+      ? lineupRoster.filter((r) => !assigned.has(r.key)).map((r) => ({ name: r.name, role: r.position }))
+      : [];
     return {
       clubName: club.name,
       accentPrimary: sAccent.primary,
@@ -661,6 +672,7 @@ export default function Home() {
       netSpend,
       formationName: lineup ? FORMATIONS[lineup.formation].name : "—",
       players,
+      leftovers,
     };
   }, [clubId, club, season, after, before, afterHeadroom, mvEndOfPlan, dealRows, dealSpend, dealIncome, netSpend, lineup, lineupRoster]);
 

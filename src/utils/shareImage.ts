@@ -28,6 +28,13 @@ export interface SharePlayer {
   y: number;
   /** Cosmetic tag so signings/loan-ins can be flagged. */
   tag?: "squad" | "signing" | "loan-in";
+  /** Ordered backup names for this position (primary first). */
+  subs?: string[];
+}
+
+export interface ShareLeftover {
+  name: string;
+  role: SharePlayerRole;
 }
 
 export interface ShareDeal {
@@ -70,6 +77,8 @@ export interface ShareData {
   // --- Lineup ---
   formationName: string; // "4-3-3"
   players: SharePlayer[]; // may be empty (no lineup built)
+  /** Squad players not starting and not a backup anywhere — listed under the pitch. */
+  leftovers?: ShareLeftover[];
 }
 
 export type ShareCardId = "lineup" | "dealsheet" | "scr";
@@ -301,12 +310,92 @@ function drawPlayer(ctx: Ctx, p: SharePlayer, px: number, py: number) {
   font(ctx, "bold", 25);
   const tw = Math.min(ctx.measureText(label).width, 180);
   const plateW = tw + 20;
+  const plateY = py + r + 6;
   ctx.fillStyle = "rgba(10,10,10,0.72)";
-  roundRect(ctx, px - plateW / 2, py + r + 6, plateW, 34, 8);
+  roundRect(ctx, px - plateW / 2, plateY, plateW, 34, 8);
   ctx.fill();
   ctx.fillStyle = "#ffffff";
-  ctx.fillText(ellipsize(ctx, label, 180), px, py + r + 24);
+  ctx.textBaseline = "middle";
+  ctx.fillText(ellipsize(ctx, label, 180), px, plateY + 18);
+
+  // Primary backup pill (matches the in-app "⇄ Name +N" chip).
+  const subs = p.subs ?? [];
+  if (subs.length > 0) {
+    const sub = surname(subs[0]);
+    const extra = subs.length > 1 ? `  +${subs.length - 1}` : "";
+    font(ctx, "bold", 19);
+    const textW = Math.min(ctx.measureText(sub + extra).width, 150);
+    const pad = 12, dotR = 4, gap = 8, pillH = 28;
+    const pillW = pad + dotR * 2 + gap + textW + pad;
+    const pillX = px - pillW / 2;
+    const pillY = plateY + 34 + 6;
+    ctx.fillStyle = "rgba(56,189,248,0.16)";
+    roundRect(ctx, pillX, pillY, pillW, pillH, 9);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(56,189,248,0.5)";
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, pillX, pillY, pillW, pillH, 9);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(pillX + pad + dotR, pillY + pillH / 2, dotR, 0, Math.PI * 2);
+    ctx.fillStyle = "#38bdf8";
+    ctx.fill();
+    ctx.fillStyle = "#7dd3fc";
+    ctx.textAlign = "left";
+    ctx.fillText(ellipsize(ctx, sub + extra, 150), pillX + pad + dotR * 2 + gap, pillY + pillH / 2 + 1);
+  }
   ctx.textAlign = "left";
+}
+
+/** Wrapped chips of leftover players under the pitch. */
+function drawLeftovers(ctx: Ctx, items: ShareLeftover[], x: number, y: number, w: number, maxRows: number) {
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  font(ctx, "bold", 22);
+  setTracking(ctx, 2);
+  ctx.fillStyle = C.dim;
+  ctx.fillText(`OTHER SQUAD PLAYERS · ${items.length}`, x, y);
+  setTracking(ctx, 0);
+
+  const chipH = 40, chipGap = 12, rowGap = 12, pad = 14, dotR = 5, dgap = 8;
+  let cx = x, cy = y + 26;
+  let row = 0;
+  font(ctx, 600, 22);
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    const nm = surname(it.name);
+    const tw = Math.min(ctx.measureText(nm).width, 190);
+    const chipW = pad + dotR * 2 + dgap + tw + pad;
+    if (cx + chipW > x + w) {
+      row++;
+      if (row >= maxRows) {
+        const remaining = items.length - i;
+        if (remaining > 0) {
+          ctx.fillStyle = C.dim;
+          font(ctx, "bold", 22);
+          ctx.fillText(`+${remaining} more`, cx, cy + chipH / 2);
+        }
+        return;
+      }
+      cx = x;
+      cy += chipH + rowGap;
+    }
+    ctx.fillStyle = C.panel;
+    roundRect(ctx, cx, cy, chipW, chipH, 10);
+    ctx.fill();
+    ctx.strokeStyle = C.panelLine;
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, cx, cy, chipW, chipH, 10);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx + pad + dotR, cy + chipH / 2, dotR, 0, Math.PI * 2);
+    ctx.fillStyle = ROLE_COLOR[it.role];
+    ctx.fill();
+    ctx.fillStyle = C.text;
+    font(ctx, 600, 22);
+    ctx.fillText(ellipsize(ctx, nm, 190), cx + pad + dotR * 2 + dgap, cy + chipH / 2 + 1);
+    cx += chipW + chipGap;
+  }
 }
 
 function renderLineup(ctx: Ctx, d: ShareData) {
@@ -322,7 +411,12 @@ function renderLineup(ctx: Ctx, d: ShareData) {
   ctx.fillText(`FORMATION · ${d.formationName}`, 84, 120);
   setTracking(ctx, 0);
 
-  const px = 40, py = 150, pw = W - 80, ph = 1010;
+  const leftovers = d.leftovers ?? [];
+  const hasBench = leftovers.length > 0;
+  const px = 40, py = 150;
+  const pw = W - 80;
+  // Reserve room under the pitch for the leftovers strip when there is one.
+  const ph = hasBench ? 830 : 1010;
   drawPitch(ctx, px, py, pw, ph);
 
   if (d.players.length === 0) {
@@ -336,15 +430,18 @@ function renderLineup(ctx: Ctx, d: ShareData) {
     return;
   }
 
-  // Inner pitch play area (inside the margin) for player placement.
-  const m = 22;
-  const fieldX = px + m + 24, fieldY = py + m + 30;
-  const fieldW = pw - (m + 24) * 2, fieldH = ph - (m + 30) * 2;
+  // Inner play area — generous top/bottom insets so slot labels and the GK's
+  // backup pill stay inside the touchline.
+  const topInset = 52, bottomInset = 96, sideInset = 60;
+  const fieldX = px + sideInset, fieldY = py + topInset;
+  const fieldW = pw - sideInset * 2, fieldH = ph - topInset - bottomInset;
   for (const p of d.players) {
     const cx = fieldX + (p.x / 100) * fieldW;
     const cy = fieldY + (p.y / 100) * fieldH;
     drawPlayer(ctx, p, cx, cy);
   }
+
+  if (hasBench) drawLeftovers(ctx, leftovers, px + 16, py + ph + 42, pw - 32, 3);
   footer(ctx);
 }
 
@@ -382,127 +479,121 @@ function statBox(
   ctx.textAlign = "left";
 }
 
+/**
+ * One deal-sheet column. Deals arrive pre-sorted (largest fee first); we fit as
+ * many as the panel height allows and summarise the rest as "+N more".
+ */
+function dealPanel(
+  ctx: Ctx,
+  title: string,
+  titleColor: string,
+  deals: ShareDeal[],
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  amtColor: string,
+  sign: string,
+) {
+  ctx.fillStyle = C.bgSoft;
+  roundRect(ctx, x, y, w, h, 16);
+  ctx.fill();
+  ctx.strokeStyle = C.panelLine;
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, x, y, w, h, 16);
+  ctx.stroke();
+
+  const pad = 18;
+  ctx.textBaseline = "middle";
+  // Title + count.
+  ctx.textAlign = "left";
+  font(ctx, "black", 23);
+  setTracking(ctx, 1);
+  ctx.fillStyle = titleColor;
+  ctx.fillText(title, x + pad, y + 34);
+  setTracking(ctx, 0);
+  font(ctx, "bold", 22);
+  ctx.fillStyle = C.dim;
+  ctx.textAlign = "right";
+  ctx.fillText(String(deals.length), x + w - pad, y + 34);
+  ctx.textAlign = "left";
+  // Divider.
+  ctx.strokeStyle = C.panelLine;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + pad, y + 60);
+  ctx.lineTo(x + w - pad, y + 60);
+  ctx.stroke();
+
+  if (deals.length === 0) {
+    font(ctx, 600, 23);
+    ctx.fillStyle = C.faint;
+    ctx.fillText("None", x + pad, y + 100);
+    return;
+  }
+
+  const headerH = 78;
+  const rowH = 48;
+  const rowGap = 8;
+  const perRow = rowH + rowGap;
+  const maxRows = Math.max(0, Math.floor((h - headerH - pad) / perRow));
+  const overflow = deals.length > maxRows;
+  // Keep one slot for the "+N more" line when we can't show everything.
+  const visible = overflow ? deals.slice(0, Math.max(0, maxRows - 1)) : deals;
+
+  let ry = y + headerH;
+  for (const deal of visible) {
+    const cy = ry + rowH / 2;
+    const amountStr = `${sign}£${Math.round(deal.amount)}m`;
+    font(ctx, "black", 24);
+    const amtW = ctx.measureText(amountStr).width;
+    font(ctx, 600, 23);
+    ctx.fillStyle = C.text;
+    ctx.textAlign = "left";
+    ctx.fillText(ellipsize(ctx, deal.text, w - pad * 2 - amtW - 16), x + pad, cy);
+    font(ctx, "black", 24);
+    ctx.fillStyle = amtColor;
+    ctx.textAlign = "right";
+    ctx.fillText(amountStr, x + w - pad, cy);
+    ctx.textAlign = "left";
+    ry += perRow;
+  }
+  if (overflow) {
+    font(ctx, "bold", 21);
+    ctx.fillStyle = C.dim;
+    ctx.fillText(`+${deals.length - visible.length} more`, x + pad, ry + rowH / 2);
+  }
+}
+
 function renderDealSheet(ctx: Ctx, d: ShareData) {
   background(ctx, d);
   header(ctx, d, "Deal Sheet", d.seasonLabel);
 
   const left = 56;
-  const right = W - 56;
-  const width = right - left;
-  let y = 168;
-
-  // Group deals by window, preserving first-seen order.
-  const order: string[] = [];
-  const groups = new Map<string, ShareDeal[]>();
-  for (const deal of d.deals) {
-    if (!groups.has(deal.window)) {
-      groups.set(deal.window, []);
-      order.push(deal.window);
-    }
-    groups.get(deal.window)!.push(deal);
-  }
-
-  const rowH = 58;
-  const rowGap = 10;
-  const grpGap = 18;
+  const width = W - 112;
+  const gap = 24;
+  const panelW = (width - gap) / 2;
+  const panelY = 176;
   const aggH = 150;
-  const bottomLimit = H - 120 - aggH; // leave room for aggregates + footer
+  const ay = H - 110 - aggH;
+  const panelH = ay - 24 - panelY;
 
-  let shown = 0;
-  const total = d.deals.length;
-  let truncated = false;
+  // Incomings = cash out (signings / loan-ins); Outgoings = cash in (sales /
+  // loan-outs). Largest fee first so the marquee deals always make the cut.
+  const incomings = d.deals.filter((x) => x.dir === "out").sort((a, b) => b.amount - a.amount);
+  const outgoings = d.deals.filter((x) => x.dir === "in").sort((a, b) => b.amount - a.amount);
 
-  ctx.textBaseline = "middle";
-  outer: for (const win of order) {
-    // Window pill.
-    if (y + 40 > bottomLimit) { truncated = true; break; }
-    font(ctx, "bold", 22);
-    const pillLabel = win.toUpperCase();
-    const pw = ctx.measureText(pillLabel).width + 28;
-    ctx.fillStyle = C.bgSoft;
-    roundRect(ctx, left, y, pw, 34, 10);
-    ctx.fill();
-    ctx.strokeStyle = C.panelLine;
-    ctx.lineWidth = 1.5;
-    roundRect(ctx, left, y, pw, 34, 10);
-    ctx.stroke();
-    setTracking(ctx, 1);
-    ctx.fillStyle = C.muted;
-    ctx.textAlign = "left";
-    ctx.fillText(pillLabel, left + 14, y + 18);
-    setTracking(ctx, 0);
-    y += 34 + 12;
-
-    for (const deal of groups.get(win)!) {
-      if (y + rowH > bottomLimit) { truncated = true; break outer; }
-      // Row card.
-      ctx.fillStyle = C.panel;
-      roundRect(ctx, left, y, width, rowH, 12);
-      ctx.fill();
-      ctx.strokeStyle = C.panelLine;
-      ctx.lineWidth = 1.5;
-      roundRect(ctx, left, y, width, rowH, 12);
-      ctx.stroke();
-
-      const cy = y + rowH / 2;
-      // IN / OUT badge (matches app: cash-out signing = "IN").
-      const badge = deal.dir === "out" ? "IN" : "OUT";
-      font(ctx, "black", 18);
-      const bw = 58;
-      ctx.fillStyle = C.bgSoft;
-      roundRect(ctx, left + 14, cy - 16, bw, 32, 8);
-      ctx.fill();
-      ctx.fillStyle = deal.dir === "out" ? C.green : "#38bdf8";
-      ctx.textAlign = "center";
-      ctx.fillText(badge, left + 14 + bw / 2, cy + 1);
-      // Name.
-      ctx.textAlign = "left";
-      font(ctx, 600, 26);
-      ctx.fillStyle = C.text;
-      const amountStr = `${deal.dir === "out" ? "−" : "+"}£${Math.round(deal.amount)}m`;
-      font(ctx, "black", 28);
-      const amtW = ctx.measureText(amountStr).width;
-      font(ctx, 600, 26);
-      const nameMax = width - (bw + 28) - amtW - 40;
-      ctx.fillText(ellipsize(ctx, deal.text, nameMax), left + 14 + bw + 16, cy + 1);
-      // Amount.
-      font(ctx, "black", 28);
-      ctx.fillStyle = deal.dir === "out" ? C.red : C.green;
-      ctx.textAlign = "right";
-      ctx.fillText(amountStr, right - 16, cy + 1);
-      ctx.textAlign = "left";
-
-      y += rowH + rowGap;
-      shown++;
-    }
-    y += grpGap;
-  }
-
-  if (truncated && total > shown) {
-    font(ctx, "bold", 22);
-    ctx.fillStyle = C.dim;
-    ctx.textAlign = "center";
-    ctx.fillText(`+${total - shown} more move${total - shown === 1 ? "" : "s"}`, W / 2, y + 8);
-    ctx.textAlign = "left";
-  }
-
-  if (total === 0) {
-    ctx.textAlign = "center";
-    font(ctx, "bold", 30);
-    ctx.fillStyle = C.dim;
-    ctx.fillText("No transfers in this plan", W / 2, 300);
-    ctx.textAlign = "left";
-  }
+  dealPanel(ctx, "INCOMINGS", C.red, incomings, left, panelY, panelW, panelH, C.red, "−");
+  dealPanel(ctx, "OUTGOINGS", C.green, outgoings, left + panelW + gap, panelY, panelW, panelH, C.green, "+");
 
   // Aggregates row, anchored above the footer.
-  const ay = H - 110 - aggH;
-  const gap = 20;
-  const bw2 = (width - gap * 2) / 3;
+  const g2 = 20;
+  const bw2 = (width - g2 * 2) / 3;
   statBox(ctx, left, ay, bw2, aggH, "Expenditure", fmtM(d.dealSpend), C.red);
-  statBox(ctx, left + bw2 + gap, ay, bw2, aggH, "Income", fmtM(d.dealIncome), C.green);
+  statBox(ctx, left + bw2 + g2, ay, bw2, aggH, "Income", fmtM(d.dealIncome), C.green);
   statBox(
     ctx,
-    left + (bw2 + gap) * 2,
+    left + (bw2 + g2) * 2,
     ay,
     bw2,
     aggH,
