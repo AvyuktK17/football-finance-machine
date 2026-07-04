@@ -1512,6 +1512,21 @@ export default function Home() {
   // =========================================================================
   if (step === "compliance") {
     const stat = ZONE_STATUS[after.zone];
+
+    // Wages-to-revenue — a classic football-finance health indicator, separate
+    // from the regulatory SCR. UEFA has long treated ~70% as the line beyond
+    // which wage costs start to strain a club's finances.
+    const beforeWR = baseSeason.state.estimatedRevenue > 0 ? baseSeason.state.annualWages / baseSeason.state.estimatedRevenue : 0;
+    const afterWR = season.state.estimatedRevenue > 0 ? season.state.annualWages / season.state.estimatedRevenue : 0;
+    const WR_BENCHMARK = 0.70;
+    const WR_MAX = 1.2; // bar scale
+    const wrBand = afterWR <= WR_BENCHMARK ? "healthy" : afterWR <= 0.85 ? "elevated" : "danger";
+    const wrTone = wrBand === "healthy" ? "text-emerald-400" : wrBand === "elevated" ? "text-amber-400" : "text-red-500";
+    const wrBar = wrBand === "healthy" ? "bg-emerald-500" : wrBand === "elevated" ? "bg-amber-500" : "bg-red-600";
+    const wrChip = wrBand === "healthy" ? "border-emerald-700/50 bg-emerald-950/40 text-emerald-300" : wrBand === "elevated" ? "border-amber-700/50 bg-amber-950/40 text-amber-300" : "border-red-700/50 bg-red-950/40 text-red-300";
+    const wrVerdict = wrBand === "healthy" ? "Healthy" : wrBand === "elevated" ? "Elevated" : "Danger zone";
+    const wrDelta = (afterWR - beforeWR) * 100;
+    const wrDeltaGood = afterWR <= beforeWR;
     // Key moves for the shareable result card — biggest first, max 5.
     const keyMoves: { text: string; kind: "in" | "out" | "loan" }[] = [
       ...incomings.map((i) => ({ text: `${i.label || "Signing"} ${i.isFree ? "(free)" : `£${i.fee}m`}`, kind: "in" as const, size: i.isFree ? 0 : i.fee })),
@@ -1637,6 +1652,46 @@ export default function Home() {
                 { label: "Headroom vs limit", value: afterHeadroom >= 0 ? fmtM(afterHeadroom) : `−${fmtM(Math.abs(afterHeadroom))}`, delta: fmtDeltaM(afterHeadroom - beforeHeadroom), deltaGood: afterHeadroom >= beforeHeadroom },
               ]} />
             </div>
+          </div>
+
+          {/* Wages-to-revenue — football-finance health gauge */}
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5">
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-neutral-500">💷 Wages-to-revenue</p>
+                <p className="text-[11px] text-neutral-600 mt-0.5">Share of football revenue spent on wages — the classic sustainability gauge.</p>
+              </div>
+              <span className={`shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-full border ${wrChip}`}>{wrVerdict}</span>
+            </div>
+
+            <div className="flex items-end gap-3 mb-4">
+              <span className="text-xl font-bold tabular-nums text-neutral-500">{fmtPct(beforeWR)}</span>
+              <span className="text-neutral-600 mb-0.5">→</span>
+              <span className={`text-4xl font-black tabular-nums ${wrTone}`}>{fmtPct(afterWR)}</span>
+              {totalMoves > 0 && (
+                <span className={`mb-1 text-sm font-semibold tabular-nums ${wrDeltaGood ? "text-emerald-400" : "text-red-400"}`}>
+                  {(wrDelta >= 0 ? "+" : "") + wrDelta.toFixed(1)}pp
+                </span>
+              )}
+            </div>
+
+            {/* Bar with UEFA 70% benchmark marker */}
+            <div className="relative h-3.5 rounded-full bg-neutral-800 overflow-hidden ring-1 ring-neutral-700">
+              <div className={`h-full ${wrBar} transition-all duration-300`} style={{ width: `${Math.min(100, (afterWR / WR_MAX) * 100)}%` }} />
+              <div className="absolute inset-y-0 w-0.5 bg-white/70" style={{ left: `${(WR_BENCHMARK / WR_MAX) * 100}%` }} aria-hidden />
+            </div>
+            <div className="relative mt-1.5 h-4 text-[10px] text-neutral-500">
+              <span className="absolute left-0">0%</span>
+              <span className="absolute -translate-x-1/2 text-neutral-300 font-semibold whitespace-nowrap" style={{ left: `${(WR_BENCHMARK / WR_MAX) * 100}%` }}>↑ UEFA 70% line</span>
+              <span className="absolute right-0">{fmtPct(WR_MAX)}</span>
+            </div>
+
+            <p className="text-[11px] text-neutral-500 mt-4 leading-relaxed">
+              About <span className="text-neutral-300 font-semibold">{Math.round(afterWR * 100)}p</span> of every £1 of revenue goes on wages.{" "}
+              {afterWR > WR_BENCHMARK
+                ? "That's above the 70% comfort line clubs are often warned to stay under."
+                : "That's inside the 70% sustainability guideline."}
+            </p>
           </div>
 
           {/* Calculation breakdown (progressive disclosure) */}
