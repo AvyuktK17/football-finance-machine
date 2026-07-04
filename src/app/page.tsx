@@ -87,6 +87,20 @@ const fmtPct = (x: number) => (x * 100).toFixed(1) + "%";
 const fmtM = (x: number) => `£${Math.round(x)}m`;
 const windowShort = (w: WindowId) => WINDOWS.find((x) => x.id === w)!.short;
 
+/** Wages-to-revenue health band — a rule-of-thumb, not the regulatory limit. */
+function wrBand(wr: number): { label: string; tone: string; dot: string; chip: string } {
+  if (wr <= 0.70) return { label: "Healthy", tone: "text-emerald-400", dot: "bg-emerald-500", chip: "border-emerald-700/50 bg-emerald-950/40 text-emerald-300" };
+  if (wr <= 0.85) return { label: "Elevated", tone: "text-amber-400", dot: "bg-amber-500", chip: "border-amber-700/50 bg-amber-950/40 text-amber-300" };
+  return { label: "Danger", tone: "text-red-500", dot: "bg-red-600", chip: "border-red-700/50 bg-red-950/40 text-red-300" };
+}
+
+/** The two seasons offered on the league table. */
+const LEAGUE_SEASONS = [
+  { id: "fy2425", short: "24/25", note: "audited financials" },
+  { id: "fy2526e", short: "25/26", note: "expected financials" },
+] as const;
+type LeagueSeasonId = (typeof LEAGUE_SEASONS)[number]["id"];
+
 /** Compliance label + colour for a zone (no "points deduction" as primary UI). */
 const ZONE_STATUS: Record<Zone, { label: string; tone: string }> = {
   GREEN: { label: "Compliant", tone: "text-emerald-400" },
@@ -209,8 +223,10 @@ export default function Home() {
 
   // Club-selection screen controls.
   const [clubQuery, setClubQuery] = useState("");
-  const [clubSort, setClubSort] = useState<"scr" | "headroom" | "az">("scr");
+  const [clubSort, setClubSort] = useState<"ratio" | "headroom" | "az">("ratio");
   const [clubView, setClubView] = useState<"cards" | "table">("cards");
+  const [leagueMetric, setLeagueMetric] = useState<"scr" | "wr">("scr");
+  const [leagueSeasonId, setLeagueSeasonId] = useState<LeagueSeasonId>("fy2425");
 
   // Zone-crossing feedback (toast + meter pulse).
   const [zoneToast, setZoneToast] = useState<{ zone: Zone; improved: boolean } | null>(null);
@@ -683,16 +699,19 @@ export default function Home() {
     else setStep("compliance");
   }
 
-  // Per-club baseline SCR (default year, no plan) for the club-selection screen.
+  // Per-club baseline for the club-selection screen, for the SELECTED season
+  // (no plan). SCR limits already flip UEFA/PL by each year's Europe status.
   const leagueRows = useMemo(
     () =>
       CLUBS.map((c) => {
-        const y = getYear(c, c.defaultYearId);
-        const r = computeScr(toClubState(y));
+        const y = c.years.find((x) => x.id === leagueSeasonId) ?? getYear(c, c.defaultYearId);
+        const state = toClubState(y);
+        const r = computeScr(state);
         const headroom = r.limit * r.denominator - r.squadCosts;
-        return { club: c, year: y, result: r, headroom };
+        const wr = state.estimatedRevenue > 0 ? state.annualWages / state.estimatedRevenue : 0;
+        return { club: c, year: y, result: r, headroom, wr, wages: state.annualWages, revenue: state.estimatedRevenue };
       }),
-    [],
+    [leagueSeasonId],
   );
 
   // Search + sort applied to the club-selection screen (cards AND table).
@@ -703,9 +722,9 @@ export default function Home() {
       : [...leagueRows];
     if (clubSort === "az") rows.sort((a, b) => a.club.shortName.localeCompare(b.club.shortName));
     else if (clubSort === "headroom") rows.sort((a, b) => b.headroom - a.headroom);
-    else rows.sort((a, b) => a.result.scr - b.result.scr);
+    else rows.sort((a, b) => (leagueMetric === "wr" ? a.wr - b.wr : a.result.scr - b.result.scr));
     return rows;
-  }, [leagueRows, clubQuery, clubSort]);
+  }, [leagueRows, clubQuery, clubSort, leagueMetric]);
 
   function chooseClub(id: string) {
     setClubId(id);
@@ -729,6 +748,25 @@ export default function Home() {
             <p className="mt-6 text-sm font-medium text-neutral-300">Choose your club to begin →</p>
           </div>
 
+          {/* Metric + season toggles */}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="flex rounded-lg border border-neutral-800 bg-neutral-900 p-0.5">
+              {([["scr", "Compliance (SCR)"], ["wr", "Wages-to-revenue"]] as const).map(([k, label]) => (
+                <button key={k} onClick={() => setLeagueMetric(k)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${leagueMetric === k ? "bg-emerald-600 text-white" : "text-neutral-400 hover:text-neutral-200"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="flex rounded-lg border border-neutral-800 bg-neutral-900 p-0.5">
+              {LEAGUE_SEASONS.map((s) => (
+                <button key={s.id} onClick={() => setLeagueSeasonId(s.id)} title={s.note} className={`px-3 py-1.5 rounded-md text-xs transition ${leagueSeasonId === s.id ? "bg-neutral-700 text-white" : "text-neutral-400 hover:text-neutral-200"}`}>
+                  {s.short}
+                </button>
+              ))}
+            </div>
+            <span className="text-[11px] text-neutral-500 hidden sm:inline">{LEAGUE_SEASONS.find((s) => s.id === leagueSeasonId)!.note}</span>
+          </div>
+
           {/* Search / sort / view controls */}
           <div className="mb-6 flex flex-wrap items-center gap-2">
             <input
@@ -738,7 +776,7 @@ export default function Home() {
               className="flex-1 min-w-[160px] max-w-xs bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:border-neutral-600 outline-none"
             />
             <div className="flex rounded-lg border border-neutral-800 bg-neutral-900 p-0.5">
-              {([["scr", "Best SCR"], ["headroom", "Headroom"], ["az", "A–Z"]] as const).map(([k, label]) => (
+              {([["ratio", leagueMetric === "wr" ? "Lowest W/R" : "Best SCR"], ["headroom", "Headroom"], ["az", "A–Z"]] as const).map(([k, label]) => (
                 <button key={k} onClick={() => setClubSort(k)} className={`px-3 py-1.5 rounded-md text-xs transition ${clubSort === k ? "bg-neutral-700 text-white" : "text-neutral-400 hover:text-neutral-200"}`}>
                   {label}
                 </button>
@@ -764,6 +802,8 @@ export default function Home() {
                 const stat = ZONE_STATUS[row.result.zone];
                 const dataStatus = STATUS_STYLES[row.year.status];
                 const accent = clubAccent(row.club.id);
+                const wb = wrBand(row.wr);
+                const isWR = leagueMetric === "wr";
                 return (
                   <button
                     key={row.club.id}
@@ -777,17 +817,32 @@ export default function Home() {
                         <h2 className="text-lg font-bold leading-tight truncate">{row.club.shortName}</h2>
                         <p className="text-[11px] text-neutral-500 truncate">{row.club.name}</p>
                       </div>
-                      <span className={`shrink-0 h-2.5 w-2.5 rounded-full mt-1.5 ${z.dot}`} />
+                      <span className={`shrink-0 h-2.5 w-2.5 rounded-full mt-1.5 ${isWR ? wb.dot : z.dot}`} />
                     </div>
 
-                    <div className="mt-4 flex items-baseline gap-2">
-                      <span className={`text-3xl font-black tabular-nums ${z.text}`}>{fmtPct(row.result.scr)}</span>
-                      <span className="text-[11px] text-neutral-500">SCR · limit {fmtPct(row.result.limit)}</span>
-                    </div>
-                    <p className={`mt-1 text-xs font-semibold ${stat.tone}`}>{stat.label}</p>
-                    <p className="mt-1 text-[11px] text-neutral-500 tabular-nums">
-                      Headroom {row.headroom >= 0 ? fmtM(row.headroom) : `−${fmtM(Math.abs(row.headroom))}`}
-                    </p>
+                    {isWR ? (
+                      <>
+                        <div className="mt-4 flex items-baseline gap-2">
+                          <span className={`text-3xl font-black tabular-nums ${wb.tone}`}>{fmtPct(row.wr)}</span>
+                          <span className="text-[11px] text-neutral-500">wages ÷ revenue</span>
+                        </div>
+                        <p className={`mt-1 text-xs font-semibold ${wb.tone}`}>{wb.label}</p>
+                        <p className="mt-1 text-[11px] text-neutral-500 tabular-nums">
+                          {fmtM(row.wages)} wages · {fmtM(row.revenue)} revenue
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="mt-4 flex items-baseline gap-2">
+                          <span className={`text-3xl font-black tabular-nums ${z.text}`}>{fmtPct(row.result.scr)}</span>
+                          <span className="text-[11px] text-neutral-500">SCR · limit {fmtPct(row.result.limit)}</span>
+                        </div>
+                        <p className={`mt-1 text-xs font-semibold ${stat.tone}`}>{stat.label}</p>
+                        <p className="mt-1 text-[11px] text-neutral-500 tabular-nums">
+                          Headroom {row.headroom >= 0 ? fmtM(row.headroom) : `−${fmtM(Math.abs(row.headroom))}`}
+                        </p>
+                      </>
+                    )}
 
                     <div className="mt-4 flex flex-wrap gap-1.5">
                       <span className={`text-[10px] px-1.5 py-0.5 rounded border ${dataStatus.cls}`}>{dataStatus.label}</span>
@@ -809,10 +864,21 @@ export default function Home() {
                     <tr>
                       <th className="text-left px-4 py-2.5">#</th>
                       <th className="text-left px-4 py-2.5">Club</th>
-                      <th className="text-right px-4 py-2.5">SCR</th>
-                      <th className="text-right px-4 py-2.5">Limit</th>
-                      <th className="text-left px-4 py-2.5">Status</th>
-                      <th className="text-right px-4 py-2.5">Headroom</th>
+                      {leagueMetric === "wr" ? (
+                        <>
+                          <th className="text-right px-4 py-2.5">W/R</th>
+                          <th className="text-right px-4 py-2.5 hidden sm:table-cell">Wages</th>
+                          <th className="text-right px-4 py-2.5 hidden sm:table-cell">Revenue</th>
+                          <th className="text-left px-4 py-2.5">Band</th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="text-right px-4 py-2.5">SCR</th>
+                          <th className="text-right px-4 py-2.5">Limit</th>
+                          <th className="text-left px-4 py-2.5">Status</th>
+                          <th className="text-right px-4 py-2.5">Headroom</th>
+                        </>
+                      )}
                       <th className="text-left px-4 py-2.5 hidden sm:table-cell">Data</th>
                     </tr>
                   </thead>
@@ -821,6 +887,7 @@ export default function Home() {
                       const z = ZONE_STYLES[row.result.zone];
                       const stat = ZONE_STATUS[row.result.zone];
                       const accent = clubAccent(row.club.id);
+                      const wb = wrBand(row.wr);
                       return (
                         <tr
                           key={row.club.id}
@@ -834,12 +901,23 @@ export default function Home() {
                               <span className="font-medium text-neutral-200">{row.club.shortName}</span>
                             </span>
                           </td>
-                          <td className={`px-4 py-2.5 text-right font-bold tabular-nums ${z.text}`}>{fmtPct(row.result.scr)}</td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-neutral-400">{fmtPct(row.result.limit)}</td>
-                          <td className={`px-4 py-2.5 text-xs font-semibold ${stat.tone}`}>{stat.label}</td>
-                          <td className={`px-4 py-2.5 text-right tabular-nums ${row.headroom >= 0 ? "text-neutral-200" : "text-red-400"}`}>
-                            {row.headroom >= 0 ? fmtM(row.headroom) : `−${fmtM(Math.abs(row.headroom))}`}
-                          </td>
+                          {leagueMetric === "wr" ? (
+                            <>
+                              <td className={`px-4 py-2.5 text-right font-bold tabular-nums ${wb.tone}`}>{fmtPct(row.wr)}</td>
+                              <td className="px-4 py-2.5 text-right tabular-nums text-neutral-400 hidden sm:table-cell">{fmtM(row.wages)}</td>
+                              <td className="px-4 py-2.5 text-right tabular-nums text-neutral-400 hidden sm:table-cell">{fmtM(row.revenue)}</td>
+                              <td className={`px-4 py-2.5 text-xs font-semibold ${wb.tone}`}>{wb.label}</td>
+                            </>
+                          ) : (
+                            <>
+                              <td className={`px-4 py-2.5 text-right font-bold tabular-nums ${z.text}`}>{fmtPct(row.result.scr)}</td>
+                              <td className="px-4 py-2.5 text-right tabular-nums text-neutral-400">{fmtPct(row.result.limit)}</td>
+                              <td className={`px-4 py-2.5 text-xs font-semibold ${stat.tone}`}>{stat.label}</td>
+                              <td className={`px-4 py-2.5 text-right tabular-nums ${row.headroom >= 0 ? "text-neutral-200" : "text-red-400"}`}>
+                                {row.headroom >= 0 ? fmtM(row.headroom) : `−${fmtM(Math.abs(row.headroom))}`}
+                              </td>
+                            </>
+                          )}
                           <td className="px-4 py-2.5 hidden sm:table-cell"><span className={`text-[10px] px-1.5 py-0.5 rounded border ${STATUS_STYLES[row.year.status].cls}`}>{STATUS_STYLES[row.year.status].label}</span></td>
                         </tr>
                       );
@@ -848,14 +926,16 @@ export default function Home() {
                 </table>
               </div>
               <p className="px-4 py-2.5 text-[11px] text-neutral-600 border-t border-neutral-800 bg-neutral-900/40">
-                Baseline SCR per club — default year, no plan. Click a row to start planning.
+                {leagueMetric === "wr" ? "Wages ÷ revenue" : "Baseline SCR"} per club · {LEAGUE_SEASONS.find((s) => s.id === leagueSeasonId)!.short} {LEAGUE_SEASONS.find((s) => s.id === leagueSeasonId)!.note}, no plan. Click a row to start planning.
               </p>
             </div>
           )}
 
           <p className="mt-10 text-center text-[11px] text-neutral-600 max-w-2xl mx-auto">
-            Player-level wages, market values, book values, and amortisation are estimates unless marked otherwise.
-            SCR = squad costs ÷ (football revenue + net profit on player sales).
+            Player-level wages, market values, book values, and amortisation are estimates unless marked otherwise.{" "}
+            {leagueMetric === "wr"
+              ? "Wages-to-revenue is a sustainability rule-of-thumb (≈70% guideline), separate from the regulatory SCR. SCR limits shown elsewhere flip between the UEFA 70% and PL 85% tracks by each club's European status that season."
+              : "SCR = squad costs ÷ (football revenue + net profit on player sales). The limit is UEFA 70% for clubs in Europe that season, otherwise the Premier League 85% ceiling."}
           </p>
         </div>
       </div>
