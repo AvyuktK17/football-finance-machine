@@ -99,6 +99,15 @@ const LEAGUE_SEASONS = [
   { id: "fy2425", short: "24/25", note: "audited financials" },
   { id: "fy2526e", short: "25/26", note: "expected financials" },
 ] as const;
+
+const LEAGUES = [
+  { id: "ALL", name: "All Leagues" },
+  { id: "EPL", name: "Premier League" },
+  { id: "LALIGA", name: "La Liga" },
+  { id: "BUNDESLIGA", name: "Bundesliga" },
+  { id: "SERIEA", name: "Serie A" },
+  { id: "LIGUE1", name: "Ligue 1" },
+];
 type LeagueSeasonId = (typeof LEAGUE_SEASONS)[number]["id"];
 
 /** Compliance label + colour for a zone (no "points deduction" as primary UI). */
@@ -222,6 +231,7 @@ export default function Home() {
   const [wagePolicy, setWagePolicy] = useState<WagePolicy>("renew");
 
   // Club-selection screen controls.
+  const [selectedLeague, setSelectedLeague] = useState<string>("ALL");
   const [clubQuery, setClubQuery] = useState("");
   const [clubSort, setClubSort] = useState<"ratio" | "headroom" | "az">("ratio");
   const [clubView, setClubView] = useState<"cards" | "table">("cards");
@@ -297,7 +307,7 @@ export default function Home() {
     const y = c.years.some((x) => x.id === s.yearId) ? s.yearId : c.defaultYearId;
     setYearId(y);
     setLastYear(y);
-    setTrack(s.track === "UEFA" || s.track === "PL_DOMESTIC" ? s.track : "AUTO");
+    setTrack((s.track && s.track !== "AUTO" ? s.track : "AUTO") as any);
     setRevenueGrowth(typeof s.revenueGrowth === "number" ? s.revenueGrowth : 0.03);
     setWagePolicy(s.wagePolicy === "expire" ? "expire" : "renew");
     if (Array.isArray(s.europeBySeason) && s.europeBySeason.length === 3) {
@@ -404,7 +414,7 @@ export default function Home() {
   }
 
   // ---- Forward projection ---------------------------------------------------
-  const baseState = toClubState(year);
+  const baseState = toClubState(year, club.league);
   const resolvedTrack: RegulatoryTrack | undefined = track === "AUTO" ? undefined : track;
 
   const planSignings: PlannedSigning[] = useMemo(
@@ -670,7 +680,20 @@ export default function Home() {
       accentPrimary: sAccent.primary,
       accentText: sAccent.text,
       seasonLabel: season.label,
-      trackLabel: after.track === "UEFA" ? "UEFA 70% track" : "Premier League 85% track",
+      trackLabel:
+        after.track === "UEFA"
+          ? "UEFA 70% track"
+          : after.track === "PL_DOMESTIC"
+          ? "Premier League 85% track"
+          : after.track === "LALIGA_DOMESTIC"
+          ? "La Liga SCL 70% track"
+          : after.track === "BUNDESLIGA_DOMESTIC"
+          ? "Bundesliga 70% track"
+          : after.track === "SERIEA_DOMESTIC"
+          ? "Serie A 70% track"
+          : after.track === "LIGUE1_DOMESTIC"
+          ? "Ligue 1 DNCG 70% track"
+          : "Domestic track",
       beforeScr: before.scr,
       afterScr: after.scr,
       limit: after.limit,
@@ -705,7 +728,7 @@ export default function Home() {
     () =>
       CLUBS.map((c) => {
         const y = c.years.find((x) => x.id === leagueSeasonId) ?? getYear(c, c.defaultYearId);
-        const state = toClubState(y);
+        const state = toClubState(y, c.league);
         const r = computeScr(state);
         const headroom = r.limit * r.denominator - r.squadCosts;
         const wr = state.estimatedRevenue > 0 ? state.annualWages / state.estimatedRevenue : 0;
@@ -717,14 +740,18 @@ export default function Home() {
   // Search + sort applied to the club-selection screen (cards AND table).
   const visibleLeagueRows = useMemo(() => {
     const q = clubQuery.trim().toLowerCase();
-    const rows = q
-      ? leagueRows.filter((r) => r.club.name.toLowerCase().includes(q) || r.club.shortName.toLowerCase().includes(q))
-      : [...leagueRows];
+    let rows = [...leagueRows];
+    if (selectedLeague !== "ALL") {
+      rows = rows.filter((r) => r.club.league === selectedLeague);
+    }
+    if (q) {
+      rows = rows.filter((r) => r.club.name.toLowerCase().includes(q) || r.club.shortName.toLowerCase().includes(q));
+    }
     if (clubSort === "az") rows.sort((a, b) => a.club.shortName.localeCompare(b.club.shortName));
     else if (clubSort === "headroom") rows.sort((a, b) => b.headroom - a.headroom);
     else rows.sort((a, b) => (leagueMetric === "wr" ? a.wr - b.wr : a.result.scr - b.result.scr));
     return rows;
-  }, [leagueRows, clubQuery, clubSort, leagueMetric]);
+  }, [leagueRows, clubQuery, clubSort, leagueMetric, selectedLeague]);
 
   function chooseClub(id: string) {
     setClubId(id);
@@ -743,7 +770,7 @@ export default function Home() {
             <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500 mb-3">Squad Cost Ratio simulator · 2026/27</p>
             <h1 className="text-4xl sm:text-5xl font-black tracking-tight">Football Finance Machine</h1>
             <p className="mt-4 text-neutral-400 max-w-xl mx-auto">
-              Build a transfer plan. Test it against UEFA and Premier League cost rules.
+              Build a transfer plan. Test it against UEFA and domestic squad cost rules.
             </p>
             <p className="mt-6 text-sm font-medium text-neutral-300">Choose your club to begin →</p>
           </div>
@@ -765,6 +792,23 @@ export default function Home() {
               ))}
             </div>
             <span className="text-[11px] text-neutral-500 hidden sm:inline">{LEAGUE_SEASONS.find((s) => s.id === leagueSeasonId)!.note}</span>
+          </div>
+
+          {/* League selection tabs */}
+          <div className="mb-4 flex flex-wrap gap-1 bg-neutral-900/60 p-1 rounded-lg border border-neutral-800 max-w-2xl">
+            {LEAGUES.map((l) => (
+              <button
+                key={l.id}
+                onClick={() => setSelectedLeague(l.id)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+                  selectedLeague === l.id
+                    ? "bg-emerald-600 text-white"
+                    : "text-neutral-400 hover:text-neutral-200"
+                }`}
+              >
+                {l.name}
+              </button>
+            ))}
           </div>
 
           {/* Search / sort / view controls */}
@@ -935,7 +979,7 @@ export default function Home() {
             Player-level wages, market values, book values, and amortisation are estimates unless marked otherwise.{" "}
             {leagueMetric === "wr"
               ? "Wages-to-revenue is a sustainability rule-of-thumb (≈70% guideline), separate from the regulatory SCR. SCR limits shown elsewhere flip between the UEFA 70% and PL 85% tracks by each club's European status that season."
-              : "SCR = squad costs ÷ (football revenue + net profit on player sales). The limit is UEFA 70% for clubs in Europe that season, otherwise the Premier League 85% ceiling."}
+              : "SCR = squad costs ÷ (football revenue + net profit on player sales). The limit is UEFA 70% for clubs in Europe that season, otherwise the domestic league ceiling (EPL 85%, others 70%)."}
           </p>
         </div>
       </div>
@@ -1135,11 +1179,21 @@ export default function Home() {
                 <div>
                   <p className="text-xs uppercase tracking-wide text-neutral-500 mb-2">Regulatory track</p>
                   <div className="flex gap-1">
-                    {(["AUTO", "UEFA", "PL_DOMESTIC"] as const).map((t) => (
-                      <button key={t} onClick={() => setTrack(t)} className={`flex-1 px-2 py-1.5 rounded-md text-[11px] transition ${track === t ? "bg-neutral-700 text-white" : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"}`}>
-                        {t === "AUTO" ? "Auto" : t === "UEFA" ? "UEFA 70%" : "PL 85%"}
-                      </button>
-                    ))}
+                    {(["AUTO", "UEFA", club.league === "EPL" ? "PL_DOMESTIC" : club.league === "LALIGA" ? "LALIGA_DOMESTIC" : club.league === "BUNDESLIGA" ? "BUNDESLIGA_DOMESTIC" : club.league === "SERIEA" ? "SERIEA_DOMESTIC" : club.league === "LIGUE1" ? "LIGUE1_DOMESTIC" : "PL_DOMESTIC"] as const).map((t) => {
+                      const isAuto = t === "AUTO";
+                      const isUefa = t === "UEFA";
+                      let label = "PL 85%";
+                      if (t === "LALIGA_DOMESTIC") label = "La Liga 70%";
+                      else if (t === "BUNDESLIGA_DOMESTIC") label = "DFL 70%";
+                      else if (t === "SERIEA_DOMESTIC") label = "Serie A 70%";
+                      else if (t === "LIGUE1_DOMESTIC") label = "DNCG 70%";
+                      
+                      return (
+                        <button key={t} onClick={() => setTrack(t as any)} className={`flex-1 px-2 py-1.5 rounded-md text-[11px] transition ${track === t ? "bg-neutral-700 text-white" : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"}`}>
+                          {isAuto ? "Auto" : isUefa ? "UEFA 70%" : label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
                 <div>
@@ -1623,7 +1677,7 @@ export default function Home() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold">Compliance result</h2>
-              <p className="text-xs text-neutral-500 mt-0.5">Your plan for {club.name}, evaluated against the {after.track === "UEFA" ? "UEFA 70%" : "Premier League 85%/115%"} track.</p>
+              <p className="text-xs text-neutral-500 mt-0.5">Your plan for {club.name}, evaluated against the {after.track === "UEFA" ? "UEFA 70%" : after.track === "PL_DOMESTIC" ? "Premier League 85%/115%" : after.track === "LALIGA_DOMESTIC" ? "La Liga 70%" : after.track === "BUNDESLIGA_DOMESTIC" ? "Bundesliga 70%/80%" : after.track === "SERIEA_DOMESTIC" ? "Serie A 70%/80%" : after.track === "LIGUE1_DOMESTIC" ? "Ligue 1 70%/80%" : "Domestic"} track.</p>
             </div>
             <button onClick={() => setStep("lineup")} className="shrink-0 rounded-lg px-4 py-2 text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition">
               Build lineup →
@@ -1658,7 +1712,7 @@ export default function Home() {
                   <span className="h-2.5 w-2.5 rounded-full ring-1 ring-neutral-700" style={{ background: accent.primary }} aria-hidden />
                   {club.name}
                 </span>
-                <span className="text-xs text-neutral-500">{season.label} · {after.track === "UEFA" ? "UEFA 70% track" : "Premier League 85% track"}</span>
+                <span className="text-xs text-neutral-500">{season.label} · {after.track === "UEFA" ? "UEFA 70% track" : after.track === "PL_DOMESTIC" ? "Premier League 85% track" : after.track === "LALIGA_DOMESTIC" ? "La Liga SCL 70% track" : after.track === "BUNDESLIGA_DOMESTIC" ? "Bundesliga 70% track" : after.track === "SERIEA_DOMESTIC" ? "Serie A 70% track" : after.track === "LIGUE1_DOMESTIC" ? "Ligue 1 DNCG 70% track" : "Domestic track"}</span>
               </div>
 
               <div className="flex flex-wrap items-end justify-between gap-4">

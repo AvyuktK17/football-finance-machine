@@ -19,6 +19,10 @@
 import type { ClubState } from "@/utils/financialEngine";
 import type { SellablePlayer } from "@/utils/clearingHouse";
 import type { EuropeTier } from "@/utils/forwardPlanner";
+import { CLUBS_BUNDESLIGA } from "./clubs_bundesliga";
+import { CLUBS_LALIGA } from "./clubs_laliga";
+import { CLUBS_LIGUE1 } from "./clubs_ligue1";
+import { CLUBS_SERIEA } from "./clubs_seriea";
 
 export type Reliability = "primary" | "derived" | "estimate" | "placeholder";
 export type VerificationStatus = "verified" | "estimate" | "provisional";
@@ -89,6 +93,7 @@ export interface Club {
   id: string;
   name: string;
   shortName: string;
+  league: string;
   years: ClubYear[];
   defaultYearId: string;
   squadAsOf: SquadAsOf;
@@ -124,6 +129,7 @@ export function toSellable(p: Player, asOfYear: number): SellablePlayer {
 // ---------------------------------------------------------------------------
 
 const TOTTENHAM: Club = {
+  league: "EPL",
   id: "tottenham",
   name: "Tottenham Hotspur",
   shortName: "Tottenham",
@@ -265,6 +271,7 @@ const TOTTENHAM: Club = {
 // ---------------------------------------------------------------------------
 
 const CHELSEA: Club = {
+  league: "EPL",
   id: "chelsea",
   name: "Chelsea",
   shortName: "Chelsea",
@@ -432,6 +439,7 @@ function yr(o: {
 const FA_URL = "https://www.thefa.com/news/2026/apr/01/agent-fees-and-transactions";
 
 const MAN_CITY: Club = {
+  league: "EPL",
   id: "man-city", name: "Manchester City", shortName: "Man City", defaultYearId: "fy2425",
   squadAsOf: {
     year: 2026,
@@ -492,6 +500,7 @@ const MAN_CITY: Club = {
 };
 
 const ARSENAL: Club = {
+  league: "EPL",
   id: "arsenal", name: "Arsenal", shortName: "Arsenal", defaultYearId: "fy2425",
   squadAsOf: {
     year: 2026,
@@ -546,6 +555,7 @@ const ARSENAL: Club = {
 };
 
 const LIVERPOOL: Club = {
+  league: "EPL",
   id: "liverpool", name: "Liverpool", shortName: "Liverpool", defaultYearId: "fy2425",
   squadAsOf: {
     year: 2026,
@@ -603,6 +613,7 @@ const LIVERPOOL: Club = {
 };
 
 const MAN_UTD: Club = {
+  league: "EPL",
   id: "man-utd", name: "Manchester United", shortName: "Man United", defaultYearId: "fy2425",
   squadAsOf: {
     year: 2026,
@@ -669,6 +680,7 @@ const MAN_UTD: Club = {
 // ---------------------------------------------------------------------------
 
 const NEWCASTLE: Club = {
+  league: "EPL",
   id: "newcastle", name: "Newcastle United", shortName: "Newcastle", defaultYearId: "fy2425",
   years: [
     yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
@@ -721,6 +733,7 @@ const NEWCASTLE: Club = {
 };
 
 const ASTON_VILLA: Club = {
+  league: "EPL",
   id: "aston-villa", name: "Aston Villa", shortName: "Aston Villa", defaultYearId: "fy2425",
   years: [
     yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: true,
@@ -777,6 +790,7 @@ const ASTON_VILLA: Club = {
 };
 
 const EVERTON: Club = {
+  league: "EPL",
   id: "everton", name: "Everton", shortName: "Everton", defaultYearId: "fy2425",
   years: [
     yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
@@ -826,6 +840,7 @@ const EVERTON: Club = {
 };
 
 const BOURNEMOUTH: Club = {
+  league: "EPL",
   id: "bournemouth", name: "AFC Bournemouth", shortName: "Bournemouth", defaultYearId: "fy2425",
   years: [
     yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
@@ -884,6 +899,7 @@ const BOURNEMOUTH: Club = {
 };
 
 const BRIGHTON: Club = {
+  league: "EPL",
   id: "brighton", name: "Brighton & Hove Albion", shortName: "Brighton", defaultYearId: "fy2425",
   years: [
     yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
@@ -949,6 +965,7 @@ const BRIGHTON: Club = {
 };
 
 const CRYSTAL_PALACE: Club = {
+  league: "EPL",
   id: "crystal-palace", name: "Crystal Palace", shortName: "Crystal Palace", defaultYearId: "fy2425",
   years: [
     yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
@@ -1005,6 +1022,7 @@ const CRYSTAL_PALACE: Club = {
 };
 
 const BRENTFORD: Club = {
+  league: "EPL",
   id: "brentford", name: "Brentford", shortName: "Brentford", defaultYearId: "fy2425",
   years: [
     yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
@@ -1061,6 +1079,7 @@ const BRENTFORD: Club = {
 };
 
 const NOTTINGHAM_FOREST: Club = {
+  league: "EPL",
   id: "nottingham-forest", name: "Nottingham Forest", shortName: "Nott'm Forest", defaultYearId: "fy2425",
   years: [
     yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
@@ -1113,6 +1132,7 @@ const NOTTINGHAM_FOREST: Club = {
 };
 
 const FULHAM: Club = {
+  league: "EPL",
   id: "fulham", name: "Fulham", shortName: "Fulham", defaultYearId: "fy2425",
   years: [
     yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
@@ -1164,6 +1184,7 @@ const FULHAM: Club = {
 };
 
 const LEEDS: Club = {
+  league: "EPL",
   id: "leeds", name: "Leeds United", shortName: "Leeds", defaultYearId: "fy2425",
   years: [
     yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
@@ -1215,6 +1236,7 @@ const LEEDS: Club = {
 };
 
 const SUNDERLAND: Club = {
+  league: "EPL",
   id: "sunderland", name: "Sunderland", shortName: "Sunderland", defaultYearId: "fy2425",
   years: [
     yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
@@ -1266,6 +1288,10 @@ const SUNDERLAND: Club = {
 };
 
 export const CLUBS: Club[] = [
+  ...CLUBS_LALIGA,
+  ...CLUBS_BUNDESLIGA,
+  ...CLUBS_SERIEA,
+  ...CLUBS_LIGUE1,
   TOTTENHAM, CHELSEA, MAN_CITY, ARSENAL, LIVERPOOL, MAN_UTD,
   NEWCASTLE, ASTON_VILLA, EVERTON, BOURNEMOUTH, BRIGHTON, CRYSTAL_PALACE, BRENTFORD,
   NOTTINGHAM_FOREST, FULHAM, LEEDS, SUNDERLAND,
@@ -1283,7 +1309,7 @@ export function getYear(club: Club, yearId: string): ClubYear {
   );
 }
 
-export function toClubState(year: ClubYear): ClubState {
+export function toClubState(year: ClubYear, league?: string): ClubState {
   return {
     estimatedRevenue: year.revenue.value,
     annualWages: year.wages.value,
@@ -1292,6 +1318,7 @@ export function toClubState(year: ClubYear): ClubState {
     netPlayerTradingProfit: year.netPlayerTradingProfit.value,
     priorNetPlayerTradingProfits: year.priorNetTradingProfits,
     isPlayingInEurope: year.isPlayingInEurope,
+    league,
   };
 }
 

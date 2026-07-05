@@ -30,7 +30,7 @@ export const RULES = {
  */
 export const SCR_DISPOSAL_WINDOW_YEARS = 3;
 
-export type RegulatoryTrack = "UEFA" | "PL_DOMESTIC";
+export type RegulatoryTrack = "UEFA" | "PL_DOMESTIC" | "LALIGA_DOMESTIC" | "SERIEA_DOMESTIC" | "BUNDESLIGA_DOMESTIC" | "LIGUE1_DOMESTIC";
 export type Zone = "GREEN" | "YELLOW" | "RED";
 
 // ---------------------------------------------------------------------------
@@ -66,6 +66,8 @@ export interface ClubState {
   plRedThreshold?: number;
   /** Whether the club is in UEFA competition (bound by the 70% rule) */
   isPlayingInEurope: boolean;
+  /** The club's domestic league */
+  league?: string;
 }
 
 export interface IncomingTransfer {
@@ -262,8 +264,19 @@ export function computeScr(
   club: ClubState,
   track?: RegulatoryTrack,
 ): ScrResult {
-  const resolvedTrack: RegulatoryTrack =
-    track ?? (club.isPlayingInEurope ? "UEFA" : "PL_DOMESTIC");
+  const defaultTrack: RegulatoryTrack = club.isPlayingInEurope
+    ? "UEFA"
+    : club.league === "LALIGA"
+    ? "LALIGA_DOMESTIC"
+    : club.league === "BUNDESLIGA"
+    ? "BUNDESLIGA_DOMESTIC"
+    : club.league === "SERIEA"
+    ? "SERIEA_DOMESTIC"
+    : club.league === "LIGUE1"
+    ? "LIGUE1_DOMESTIC"
+    : "PL_DOMESTIC";
+
+  const resolvedTrack: RegulatoryTrack = track ?? defaultTrack;
 
   const netProfit = club.netPlayerTradingProfit ?? 0;
   const squadCosts = club.annualWages + club.annualAmortisation + club.agentFees;
@@ -284,13 +297,27 @@ export function computeScr(
   const scr = squadCosts / denominator;
 
   const limit =
-    resolvedTrack === "UEFA" ? RULES.UEFA_THRESHOLD : RULES.PL_GREEN_THRESHOLD;
+    resolvedTrack === "UEFA"
+      ? RULES.UEFA_THRESHOLD
+      : resolvedTrack === "PL_DOMESTIC"
+      ? RULES.PL_GREEN_THRESHOLD
+      : 0.70; // 70% limit for La Liga, Serie A, Bundesliga, Ligue 1
 
   // Dynamic PL red threshold (multi-year allowance); irrelevant on UEFA track.
   const redLimit =
     resolvedTrack === "UEFA"
       ? 0
-      : club.plRedThreshold ?? RULES.PL_RED_THRESHOLD;
+      : resolvedTrack === "PL_DOMESTIC"
+      ? (club.plRedThreshold ?? RULES.PL_RED_THRESHOLD)
+      : resolvedTrack === "LALIGA_DOMESTIC"
+      ? 0.70
+      : resolvedTrack === "BUNDESLIGA_DOMESTIC"
+      ? 0.80
+      : resolvedTrack === "SERIEA_DOMESTIC"
+      ? 0.80
+      : resolvedTrack === "LIGUE1_DOMESTIC"
+      ? 0.80
+      : RULES.PL_RED_THRESHOLD;
 
   const { zone, pointsDeduction } = classify(
     scr,
@@ -337,17 +364,37 @@ export function classify(
     };
   }
 
-  // PL_DOMESTIC — red threshold may be a dynamic multi-year value in [green, 1.15].
-  if (scr <= RULES.PL_GREEN_THRESHOLD) return { zone: "GREEN", pointsDeduction: 0 };
+  if (track === "LALIGA_DOMESTIC") {
+    return {
+      zone: scr <= 0.70 ? "GREEN" : "RED",
+      pointsDeduction: 0,
+    };
+  }
+
+  // Domestic tracks for other leagues
+  const greenLimit =
+    track === "PL_DOMESTIC"
+      ? RULES.PL_GREEN_THRESHOLD
+      : 0.70;
+
+  if (scr <= greenLimit) return { zone: "GREEN", pointsDeduction: 0 };
   if (scr <= redLimit) return { zone: "YELLOW", pointsDeduction: 0 };
 
-  // Above the (dynamic) Red Threshold => sporting sanction.
-  const redThresholdCosts = redLimit * denominator;
-  const excessOverRed = Math.max(0, squadCosts - redThresholdCosts);
-  const extraPoints = Math.floor(excessOverRed / RULES.POINTS_PER_MILLIONS_OVER);
+  // Above the Red Threshold => sporting sanction (points deduction)
+  if (track === "PL_DOMESTIC" || track === "BUNDESLIGA_DOMESTIC" || track === "SERIEA_DOMESTIC") {
+    const redThresholdCosts = redLimit * denominator;
+    const excessOverRed = Math.max(0, squadCosts - redThresholdCosts);
+    const extraPoints = Math.floor(excessOverRed / RULES.POINTS_PER_MILLIONS_OVER);
+    return {
+      zone: "RED",
+      pointsDeduction: RULES.POINTS_BASE_DEDUCTION + extraPoints,
+    };
+  }
+
+  // Ligue 1 doesn't have automatic points deduction
   return {
     zone: "RED",
-    pointsDeduction: RULES.POINTS_BASE_DEDUCTION + extraPoints,
+    pointsDeduction: 0,
   };
 }
 
@@ -359,7 +406,14 @@ function buildHeadline(
   denomWarning: boolean,
 ): string {
   const pct = (scr * 100).toFixed(1) + "%";
-  const label = track === "UEFA" ? "UEFA (70%)" : "Premier League (85%)";
+  
+  let label = "UEFA (70%)";
+  if (track === "PL_DOMESTIC") label = "Premier League (85%)";
+  else if (track === "LALIGA_DOMESTIC") label = "La Liga SCL (70%)";
+  else if (track === "BUNDESLIGA_DOMESTIC") label = "Bundesliga (70%)";
+  else if (track === "SERIEA_DOMESTIC") label = "Serie A (70%)";
+  else if (track === "LIGUE1_DOMESTIC") label = "Ligue 1 DNCG (70%)";
+
   if (denomWarning)
     return `Revenue base collapsed — SCR unbounded (${label}). Sell before you buy.`;
   if (zone === "GREEN") return `Compliant — SCR ${pct} under ${label}.`;
