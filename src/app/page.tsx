@@ -307,7 +307,7 @@ export default function Home() {
     const y = c.years.some((x) => x.id === s.yearId) ? s.yearId : c.defaultYearId;
     setYearId(y);
     setLastYear(y);
-    setTrack((s.track && s.track !== "AUTO" ? s.track : "AUTO") as any);
+    setTrack((s.track && s.track !== "AUTO" ? s.track : "AUTO") as RegulatoryTrack | "AUTO");
     setRevenueGrowth(typeof s.revenueGrowth === "number" ? s.revenueGrowth : 0.03);
     setWagePolicy(s.wagePolicy === "expire" ? "expire" : "renew");
     if (Array.isArray(s.europeBySeason) && s.europeBySeason.length === 3) {
@@ -686,13 +686,13 @@ export default function Home() {
           : after.track === "PL_DOMESTIC"
           ? "Premier League 85% track"
           : after.track === "LALIGA_DOMESTIC"
-          ? "La Liga SCL 70% track"
+          ? "La Liga · squad-cost limit"
           : after.track === "BUNDESLIGA_DOMESTIC"
-          ? "Bundesliga 70% track"
+          ? "Bundesliga · DFL licensing (UEFA 70% ref)"
           : after.track === "SERIEA_DOMESTIC"
-          ? "Serie A 70% track"
+          ? "Serie A · FIGC liquidity (UEFA 70% ref)"
           : after.track === "LIGUE1_DOMESTIC"
-          ? "Ligue 1 DNCG 70% track"
+          ? "Ligue 1 · DNCG 70% cap"
           : "Domestic track",
       beforeScr: before.scr,
       afterScr: after.scr,
@@ -1189,7 +1189,7 @@ export default function Home() {
                       else if (t === "LIGUE1_DOMESTIC") label = "DNCG 70%";
                       
                       return (
-                        <button key={t} onClick={() => setTrack(t as any)} className={`flex-1 px-2 py-1.5 rounded-md text-[11px] transition ${track === t ? "bg-neutral-700 text-white" : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"}`}>
+                        <button key={t} onClick={() => setTrack(t)} className={`flex-1 px-2 py-1.5 rounded-md text-[11px] transition ${track === t ? "bg-neutral-700 text-white" : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"}`}>
                           {isAuto ? "Auto" : isUefa ? "UEFA 70%" : label}
                         </button>
                       );

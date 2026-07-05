@@ -296,28 +296,26 @@ export function computeScr(
 
   const scr = squadCosts / denominator;
 
+  // 70% reference line for the four non-English leagues. Only Ligue 1 (DNCG)
+  // and UEFA (for European clubs) is a real 70% squad-cost cap; for La Liga it
+  // stands in for the club-specific squad-cost limit (LCPD), and for Bundesliga
+  // and Serie A it is the UEFA sustainability benchmark (no domestic ratio rule
+  // exists — DFL licensing / FIGC liquidity index instead). See buildHeadline.
   const limit =
     resolvedTrack === "UEFA"
       ? RULES.UEFA_THRESHOLD
       : resolvedTrack === "PL_DOMESTIC"
       ? RULES.PL_GREEN_THRESHOLD
-      : 0.70; // 70% limit for La Liga, Serie A, Bundesliga, Ligue 1
+      : 0.70;
 
-  // Dynamic PL red threshold (multi-year allowance); irrelevant on UEFA track.
+  // PL keeps its multi-year red allowance; the four other leagues are binary
+  // (no domestic "luxury levy" buffer), so redLimit == the 70% line.
   const redLimit =
     resolvedTrack === "UEFA"
       ? 0
       : resolvedTrack === "PL_DOMESTIC"
       ? (club.plRedThreshold ?? RULES.PL_RED_THRESHOLD)
-      : resolvedTrack === "LALIGA_DOMESTIC"
-      ? 0.70
-      : resolvedTrack === "BUNDESLIGA_DOMESTIC"
-      ? 0.80
-      : resolvedTrack === "SERIEA_DOMESTIC"
-      ? 0.80
-      : resolvedTrack === "LIGUE1_DOMESTIC"
-      ? 0.80
-      : RULES.PL_RED_THRESHOLD;
+      : 0.70;
 
   const { zone, pointsDeduction } = classify(
     scr,
@@ -380,8 +378,12 @@ export function classify(
   if (scr <= greenLimit) return { zone: "GREEN", pointsDeduction: 0 };
   if (scr <= redLimit) return { zone: "YELLOW", pointsDeduction: 0 };
 
-  // Above the Red Threshold => sporting sanction (points deduction)
-  if (track === "PL_DOMESTIC" || track === "BUNDESLIGA_DOMESTIC" || track === "SERIEA_DOMESTIC") {
+  // Only the Premier League has an automatic sporting-sanction (points) regime
+  // tied to a squad-cost breach. The other leagues' sanctions are discretionary
+  // (Ligue 1 DNCG: wage cap / embargo / relegation), licensing-based
+  // (Bundesliga DFL), or registration-gated (La Liga cap, Serie A FIGC), so
+  // there is no automatic points deduction to model.
+  if (track === "PL_DOMESTIC") {
     const redThresholdCosts = redLimit * denominator;
     const excessOverRed = Math.max(0, squadCosts - redThresholdCosts);
     const extraPoints = Math.floor(excessOverRed / RULES.POINTS_PER_MILLIONS_OVER);
@@ -391,11 +393,7 @@ export function classify(
     };
   }
 
-  // Ligue 1 doesn't have automatic points deduction
-  return {
-    zone: "RED",
-    pointsDeduction: 0,
-  };
+  return { zone: "RED", pointsDeduction: 0 };
 }
 
 function buildHeadline(
@@ -409,17 +407,17 @@ function buildHeadline(
   
   let label = "UEFA (70%)";
   if (track === "PL_DOMESTIC") label = "Premier League (85%)";
-  else if (track === "LALIGA_DOMESTIC") label = "La Liga SCL (70%)";
-  else if (track === "BUNDESLIGA_DOMESTIC") label = "Bundesliga (70%)";
-  else if (track === "SERIEA_DOMESTIC") label = "Serie A (70%)";
-  else if (track === "LIGUE1_DOMESTIC") label = "Ligue 1 DNCG (70%)";
+  else if (track === "LALIGA_DOMESTIC") label = "La Liga squad-cost limit (~70% ref)";
+  else if (track === "BUNDESLIGA_DOMESTIC") label = "UEFA 70% benchmark (Bundesliga: DFL licensing)";
+  else if (track === "SERIEA_DOMESTIC") label = "UEFA 70% benchmark (Serie A: FIGC liquidity)";
+  else if (track === "LIGUE1_DOMESTIC") label = "Ligue 1 DNCG cap (70%)";
 
   if (denomWarning)
     return `Revenue base collapsed — SCR unbounded (${label}). Sell before you buy.`;
-  if (zone === "GREEN") return `Compliant — SCR ${pct} under ${label}.`;
+  if (zone === "GREEN") return `Compliant — SCR ${pct} within ${label}.`;
   if (zone === "YELLOW")
     return `Luxury levy zone — SCR ${pct}. Surcharge applies, no points lost.`;
-  return `Regulatory breach risk — SCR ${pct} over the ${label} limit.`;
+  return `SCR ${pct} — over ${label}.`;
 }
 
 // ---------------------------------------------------------------------------
