@@ -327,18 +327,28 @@ export interface ForwardInputs {
   europeBySeason: EuropeTier[];
   /**
    * Projected final league position (1–20) per season — EPL clubs only.
-   * When set for a season it (a) adds the merit + facility-fee revenue delta
-   * vs `baseLeaguePosition`, and (b) OVERRIDES europeBySeason for that season
-   * via positionToEuropeTier (1–4 ⇒ UCL, 5–7 ⇒ UEL/UECL). null/undefined ⇒
-   * legacy behaviour for that season.
+   * Timing matters and the two revenue streams differ:
+   *  • PL merit + facility money is earned IN the season of the finish —
+   *    position[s] adds its delta (vs `baseLeaguePosition`) to season s.
+   *  • European qualification LAGS one season — position[s] sets season
+   *    s+1's UEFA tier via positionToEuropeTier (1–4 ⇒ UCL, 5–7 ⇒ UEL/UECL).
+   *    Season 0's tier comes from `previousSeasonPosition` (the concluded
+   *    season before the projection horizon).
+   * null/undefined ⇒ legacy europeBySeason behaviour for the affected season.
    */
   leaguePositionBySeason?: (number | null | undefined)[];
   /**
    * The finishing position the BASE year's revenue already reflects — the
-   * anchor for the position delta. Without it, positions still drive the
-   * Europe tier but add no prize-money delta.
+   * anchor for the merit/facility delta. Without it, positions still drive
+   * Europe tiers but add no prize-money delta.
    */
   baseLeaguePosition?: number | null;
+  /**
+   * Final position of the season immediately BEFORE season 0 (e.g. the real
+   * 2025/26 finish when projecting 2026/27+). Determines season 0's European
+   * tier. Cup-winner qualification routes are not modelled (hard link).
+   */
+  previousSeasonPosition?: number | null;
   /**
    * Which tier the BASE year's revenue already includes. Season revenue is
    * adjusted by EUROPE_TIER_REVENUE[season tier] − EUROPE_TIER_REVENUE[base
@@ -604,14 +614,19 @@ export function projectPlan(inputs: ForwardInputs): ForwardPlan {
       }
     }
 
-    // League position (EPL): when set, the position drives the Europe tier
-    // (hard-linked: 1–4 UCL, 5–7 UEL/UECL) and adds a merit + facility-fee
-    // delta vs the base year's own finish.
+    // League position (EPL). Merit/facility money is earned IN the season of
+    // the finish; European qualification lags one season — this season's tier
+    // comes from LAST season's finish (season 0: the concluded pre-horizon
+    // season via previousSeasonPosition). Hard-linked: 1–4 UCL, 5–7 UEL/UECL.
     const leaguePosition = inputs.leaguePositionBySeason?.[s] ?? null;
     const basePosition = inputs.baseLeaguePosition ?? null;
+    const qualifyingPosition =
+      s === 0
+        ? inputs.previousSeasonPosition ?? null
+        : inputs.leaguePositionBySeason?.[s - 1] ?? null;
     const tier: EuropeTier =
-      leaguePosition != null
-        ? positionToEuropeTier(leaguePosition)
+      qualifyingPosition != null
+        ? positionToEuropeTier(qualifyingPosition)
         : europeBySeason[s] ?? (base.isPlayingInEurope ? baseTier : "NONE");
     // Tier revenue is applied as a DELTA vs the base year's own tier, so a base
     // season that already includes European money is never double-counted.
@@ -815,6 +830,8 @@ export interface SharedScenario {
   leaguePositionBySeason?: (number | null)[];
   /** Base-year finishing position override; absent ⇒ club-data default. */
   baseLeaguePosition?: number | null;
+  /** Finish of the concluded season before season 0 (sets season 0's Europe). */
+  previousSeasonPosition?: number | null;
   signings: PlannedSigning[];
   sales: PlannedSale[];
   /** absent in legacy payloads — treat as [] */

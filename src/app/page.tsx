@@ -8,6 +8,7 @@ import {
   bookValueAt,
   toSellable,
   yearEuropeTier,
+  latestLeaguePosition,
   type Player,
   type Sourced,
   type Reliability,
@@ -229,6 +230,10 @@ export default function Home() {
     const p = getYear(CLUBS[0], CLUBS[0].defaultYearId).leaguePosition ?? null;
     return [p, p, p];
   });
+  // Concluded pre-horizon finish (real 2025/26) — sets season 0's Europe tier.
+  const [prevPosition, setPrevPosition] = useState<number | null>(() =>
+    latestLeaguePosition(CLUBS[0]),
+  );
   const [showSources, setShowSources] = useState(false);
   const [showCalculation, setShowCalculation] = useState(false);
   const [showSquad, setShowSquad] = useState(false);
@@ -283,6 +288,7 @@ export default function Home() {
     setEuropeBySeason([t, t, t]);
     const p = club.league === "EPL" ? year.leaguePosition ?? null : null;
     setPositionBySeason([p, p, p]);
+    setPrevPosition(club.league === "EPL" ? latestLeaguePosition(club) : null);
   }
 
   // Keep Europe defaults in sync when the base year changes.
@@ -338,6 +344,12 @@ export default function Home() {
       } else {
         setPositionBySeason([basePos, basePos, basePos]);
       }
+      setPrevPosition(
+        typeof s.previousSeasonPosition === "number" &&
+          s.previousSeasonPosition >= 1 && s.previousSeasonPosition <= 20
+          ? Math.round(s.previousSeasonPosition)
+          : c.league === "EPL" ? latestLeaguePosition(c) : null,
+      );
     }
     setIncomings(
       (s.signings ?? []).map((g, i) => ({
@@ -388,6 +400,7 @@ export default function Home() {
     return {
       clubId, yearId, track, revenueGrowth, wagePolicy, europeBySeason,
       leaguePositionBySeason: positionBySeason,
+      previousSeasonPosition: prevPosition,
       signings: incomings.map(({ window: w, fee, weeklyWage, contractLength, isFree, marketValue, position, label }) => ({
         window: w, fee, weeklyWage, contractLength, isFree, marketValue, position, label,
       })),
@@ -487,11 +500,12 @@ export default function Home() {
       baseEuropeTier: yearEuropeTier(year),
       leaguePositionBySeason: club.league === "EPL" ? positionBySeason : undefined,
       baseLeaguePosition: club.league === "EPL" ? year.leaguePosition ?? null : null,
+      previousSeasonPosition: club.league === "EPL" ? prevPosition : null,
       track: resolvedTrack,
       wagePolicy,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clubId, yearId, planSignings, planSales, planLoansOut, planLoansIn, revenueGrowth, europeBySeason, positionBySeason, resolvedTrack, wagePolicy],
+    [clubId, yearId, planSignings, planSales, planLoansOut, planLoansIn, revenueGrowth, europeBySeason, positionBySeason, prevPosition, resolvedTrack, wagePolicy],
   );
 
   const plan = useMemo(() => projectPlan(forwardInputs), [forwardInputs]);
@@ -1248,17 +1262,33 @@ export default function Home() {
 
               {club.league === "EPL" ? (
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-neutral-500 mb-2">League finish per season <span className="normal-case text-neutral-600">(sets prize money &amp; the European tier)</span></p>
+                  <p className="text-xs uppercase tracking-wide text-neutral-500 mb-2">League finish per season <span className="normal-case text-neutral-600">(sets prize money &amp; next season&apos;s Europe)</span></p>
+                  <div className="flex items-center gap-1.5 mb-2 text-[11px] text-neutral-400">
+                    <span>Concluded 25/26 finish:</span>
+                    <select
+                      value={prevPosition ?? ""}
+                      onChange={(e) => setPrevPosition(e.target.value === "" ? null : Number(e.target.value))}
+                      className="cursor-pointer rounded border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-[11px] text-neutral-200 outline-none"
+                      title="Real final position last season — determines European participation in 2026/27."
+                    >
+                      <option value="">—</option>
+                      {Array.from({ length: 20 }, (_, i) => i + 1).map((p) => (
+                        <option key={p} value={p}>{ordinal(p)}</option>
+                      ))}
+                    </select>
+                    <span className="text-neutral-600">⇒ Europe in 26/27</span>
+                  </div>
                   <div className="grid grid-cols-3 gap-2">
                     {plan.seasons.map((s) => {
                       const pos = positionBySeason[s.seasonIndex];
-                      const tier: EuropeTier = pos != null ? positionToEuropeTier(pos) : europeBySeason[s.seasonIndex] ?? "NONE";
+                      const qualifying = s.seasonIndex === 0 ? prevPosition : positionBySeason[s.seasonIndex - 1];
+                      const tier: EuropeTier = qualifying != null ? positionToEuropeTier(qualifying) : europeBySeason[s.seasonIndex] ?? "NONE";
                       const delta = s.europeRevenueDelta + s.positionRevenueDelta;
                       return (
                         <div
                           key={s.seasonIndex}
                           className={`rounded-md border px-2 py-1.5 text-center text-[10px] ${TIER_PILL[tier].cls}`}
-                          title={`Projected final league position for ${s.label}. Top 4 ⇒ Champions League, 5–7 ⇒ Europa/Conference.`}
+                          title={`Projected final league position for ${s.label}. Prize money lands this season; a top-4 finish means Champions League THE FOLLOWING season (5–7 ⇒ Europa/Conference).`}
                         >
                           <span className="block text-neutral-500 mb-0.5">{s.label.slice(2)}</span>
                           <select
@@ -1276,8 +1306,11 @@ export default function Home() {
                           </select>
                           <span className="block mt-0.5">
                             {TIER_PILL[tier].label}
+                            <span className="block text-neutral-500">
+                              {qualifying != null ? `from ${ordinal(qualifying)} in ${s.seasonIndex === 0 ? "25/26" : SEASON_LABELS[s.seasonIndex - 1].slice(2)}` : "manual tier"}
+                            </span>
                             {delta !== 0 && (
-                              <span className="ml-1 opacity-80">{delta > 0 ? "+" : "−"}£{Math.abs(Math.round(delta))}m</span>
+                              <span className="opacity-80">{delta > 0 ? "+" : "−"}£{Math.abs(Math.round(delta))}m</span>
                             )}
                           </span>
                         </div>
@@ -1285,8 +1318,8 @@ export default function Home() {
                     })}
                   </div>
                   <p className="text-[10px] text-neutral-600 mt-1">
-                    Finish adjusts PL merit money (£2.7m/place) + estimated facility fees vs the base year&apos;s{" "}
-                    {year.leaguePosition != null ? `${ordinal(year.leaguePosition)}-place finish` : "finish"}; the European tier follows the position.
+                    A finish pays PL merit money (£2.7m/place) + estimated facility fees in the SAME season, vs the base year&apos;s{" "}
+                    {year.leaguePosition != null ? `${ordinal(year.leaguePosition)}-place finish` : "finish"}. European qualification lags a season: each season&apos;s tier comes from the previous finish (top 4 ⇒ UCL, 5–7 ⇒ UEL/UECL; cup routes not modelled).
                   </p>
                 </div>
               ) : (

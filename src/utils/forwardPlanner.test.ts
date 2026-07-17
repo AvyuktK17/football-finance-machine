@@ -24,7 +24,7 @@ import {
   type ForwardInputs,
   type SquadMember,
 } from "./forwardPlanner";
-import { RULES, weeklyWageToAnnualMillions, computeScr } from "./financialEngine";
+import { weeklyWageToAnnualMillions, computeScr } from "./financialEngine";
 
 let passed = 0;
 let failed = 0;
@@ -515,34 +515,47 @@ console.log("— league position → PL prize money & Europe tier");
   assert(positionToEuropeTier(5) === "UEL_UECL" && positionToEuropeTier(7) === "UEL_UECL", "5–7 ⇒ UEL/UECL");
   assert(positionToEuropeTier(8) === "NONE" && positionToEuropeTier(20) === "NONE", "8+ ⇒ no Europe");
 
-  // Projection: position delta lands in revenue; tier overrides europeBySeason.
+  // Projection timing: merit/facility money lands IN the season of the finish;
+  // European qualification lags one season (s0's tier from the concluded
+  // pre-horizon season, s1's from position[0], …).
   const posPlan = projectPlan({
     ...inputs,
     europeBySeason: ["NONE", "NONE", "NONE"],
     leaguePositionBySeason: [4, 10, null],
     baseLeaguePosition: 10,
+    previousSeasonPosition: 17,
   });
   const d0 = plPositionRevenueDelta(4, 10);
-  assert(approx(posPlan.seasons[0].state.estimatedRevenue, 600 + EUROPE_TIER_REVENUE.UCL + d0), "s0: UCL delta + position delta in revenue");
-  assert(posPlan.seasons[0].europeTier === "UCL", "s0: 4th ⇒ UCL despite europeBySeason NONE");
-  assert(posPlan.seasons[0].state.isPlayingInEurope, "s0: position puts club in Europe");
-  assert(approx(posPlan.seasons[1].state.estimatedRevenue, 600), "s1: same finish as base ⇒ no delta");
-  assert(posPlan.seasons[1].europeTier === "NONE", "s1: 10th ⇒ no Europe");
-  assert(posPlan.seasons[2].leaguePosition === null && approx(posPlan.seasons[2].positionRevenueDelta, 0), "s2: null position ⇒ legacy behaviour");
+  assert(approx(posPlan.seasons[0].positionRevenueDelta, d0), "s0: 4th-place merit money lands in s0");
+  assert(posPlan.seasons[0].europeTier === "NONE", "s0: Europe from last season's 17th ⇒ none");
+  assert(approx(posPlan.seasons[0].state.estimatedRevenue, 600 + d0), "s0: revenue = base + merit delta only");
+  assert(posPlan.seasons[1].europeTier === "UCL", "s1: s0's 4th ⇒ UCL the FOLLOWING season");
+  assert(posPlan.seasons[1].state.isPlayingInEurope, "s1: qualified via s0 finish");
+  assert(approx(posPlan.seasons[1].state.estimatedRevenue, 600 + EUROPE_TIER_REVENUE.UCL), "s1: UCL money + same-as-base finish ⇒ no merit delta");
+  assert(posPlan.seasons[2].europeTier === "NONE", "s2: s1's 10th ⇒ no Europe");
+  assert(posPlan.seasons[2].leaguePosition === null && approx(posPlan.seasons[2].positionRevenueDelta, 0), "s2: null position ⇒ no merit delta");
 
-  // Without a base position, positions drive the tier but add no money.
+  // Concluded pre-horizon finish alone puts season 0 in Europe.
+  const seeded = projectPlan({ ...inputs, previousSeasonPosition: 3 });
+  assert(seeded.seasons[0].europeTier === "UCL", "s0: real 3rd last season ⇒ UCL now");
+  assert(seeded.seasons[1].europeTier === "NONE", "s1: no projected finish ⇒ falls back to europeBySeason");
+
+  // Without a base position, positions drive next-season tiers but add no money.
   const noAnchor = projectPlan({ ...inputs, leaguePositionBySeason: [1, 1, 1] });
   assert(approx(noAnchor.seasons[0].positionRevenueDelta, 0), "no base position ⇒ no prize-money delta");
-  assert(noAnchor.seasons[0].europeTier === "UCL", "no base position ⇒ tier still follows position");
+  assert(noAnchor.seasons[0].europeTier === "NONE", "s0: no previous finish ⇒ legacy tier");
+  assert(noAnchor.seasons[1].europeTier === "UCL", "s1: s0's 1st ⇒ UCL next season");
 
   // Codec: positions roundtrip and stay optional for legacy payloads.
   const encPos = encodeScenario({
     clubId: "tottenham", yearId: "fy2425", track: "AUTO", revenueGrowth: 0.03,
     europeBySeason: ["NONE", "NONE", "NONE"], signings: [], sales: [],
     leaguePositionBySeason: [4, null, 17], baseLeaguePosition: 17,
+    previousSeasonPosition: 17,
   });
   const decPos = decodeScenario(encPos);
   assert(JSON.stringify(decPos?.leaguePositionBySeason) === "[4,null,17]", "positions survive share codec");
+  assert(decPos?.previousSeasonPosition === 17, "previous-season finish survives share codec");
   const encLegacy = encodeScenario({
     clubId: "tottenham", yearId: "fy2425", track: "AUTO", revenueGrowth: 0.03,
     europeBySeason: ["NONE", "NONE", "NONE"], signings: [], sales: [],

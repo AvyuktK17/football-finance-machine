@@ -69,6 +69,19 @@ export function yearEuropeTier(y: ClubYear): EuropeTier {
 }
 
 /**
+ * The club's most recent known PL finish (the concluded season immediately
+ * before the projection horizon, e.g. 2025/26 when projecting 2026/27+).
+ * Years are stored oldest-first, so take the last one with a position.
+ */
+export function latestLeaguePosition(c: Club): number | null {
+  for (let i = c.years.length - 1; i >= 0; i--) {
+    const p = c.years[i].leaguePosition;
+    if (p != null) return p;
+  }
+  return null;
+}
+
+/**
  * A player stored by contract facts. Book value is derived, not stored, so it
  * is always tied to a specific "as of" season.
  */
