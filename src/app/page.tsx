@@ -25,6 +25,7 @@ import {
   windowSeason,
   isJanuaryWindow,
   normalizeEuropeTier,
+  positionToEuropeTier,
   squadMarketValueAfter,
   buyExecutes,
   type EuropeTier,
@@ -85,6 +86,10 @@ const TIER_PILL: Record<EuropeTier, { label: string; cls: string }> = {
 
 const fmtPct = (x: number) => (x * 100).toFixed(1) + "%";
 const fmtM = (x: number) => `£${Math.round(x)}m`;
+const ordinal = (n: number) => {
+  const s = ["th", "st", "nd", "rd"], v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
+};
 const windowShort = (w: WindowId) => WINDOWS.find((x) => x.id === w)!.short;
 
 /** Wages-to-revenue health band — a rule-of-thumb, not the regulatory limit. */
@@ -219,6 +224,11 @@ export default function Home() {
     const t = yearEuropeTier(getYear(CLUBS[0], CLUBS[0].defaultYearId));
     return [t, t, t];
   });
+  // Projected league finish per season (EPL only; null = don't use positions).
+  const [positionBySeason, setPositionBySeason] = useState<(number | null)[]>(() => {
+    const p = getYear(CLUBS[0], CLUBS[0].defaultYearId).leaguePosition ?? null;
+    return [p, p, p];
+  });
   const [showSources, setShowSources] = useState(false);
   const [showCalculation, setShowCalculation] = useState(false);
   const [showSquad, setShowSquad] = useState(false);
@@ -271,6 +281,8 @@ export default function Home() {
     setSelectedSeason(0);
     const t = yearEuropeTier(year);
     setEuropeBySeason([t, t, t]);
+    const p = club.league === "EPL" ? year.leaguePosition ?? null : null;
+    setPositionBySeason([p, p, p]);
   }
 
   // Keep Europe defaults in sync when the base year changes.
@@ -279,6 +291,8 @@ export default function Home() {
     setLastYear(yearId);
     const t = yearEuropeTier(year);
     setEuropeBySeason([t, t, t]);
+    const p = club.league === "EPL" ? year.leaguePosition ?? null : null;
+    setPositionBySeason([p, p, p]);
   }
 
   // ---- Restore from share link / load saves (mount only) ------------------
@@ -312,6 +326,18 @@ export default function Home() {
     setWagePolicy(s.wagePolicy === "expire" ? "expire" : "renew");
     if (Array.isArray(s.europeBySeason) && s.europeBySeason.length === 3) {
       setEuropeBySeason(s.europeBySeason.map(normalizeEuropeTier));
+    }
+    {
+      const basePos = c.league === "EPL" ? getYear(c, y).leaguePosition ?? null : null;
+      if (Array.isArray(s.leaguePositionBySeason) && s.leaguePositionBySeason.length === 3) {
+        setPositionBySeason(
+          s.leaguePositionBySeason.map((v) =>
+            typeof v === "number" && v >= 1 && v <= 20 ? Math.round(v) : null,
+          ),
+        );
+      } else {
+        setPositionBySeason([basePos, basePos, basePos]);
+      }
     }
     setIncomings(
       (s.signings ?? []).map((g, i) => ({
@@ -361,6 +387,7 @@ export default function Home() {
   function currentPayload(): SharedScenario {
     return {
       clubId, yearId, track, revenueGrowth, wagePolicy, europeBySeason,
+      leaguePositionBySeason: positionBySeason,
       signings: incomings.map(({ window: w, fee, weeklyWage, contractLength, isFree, marketValue, position, label }) => ({
         window: w, fee, weeklyWage, contractLength, isFree, marketValue, position, label,
       })),
@@ -458,11 +485,13 @@ export default function Home() {
       revenueGrowth,
       europeBySeason,
       baseEuropeTier: yearEuropeTier(year),
+      leaguePositionBySeason: club.league === "EPL" ? positionBySeason : undefined,
+      baseLeaguePosition: club.league === "EPL" ? year.leaguePosition ?? null : null,
       track: resolvedTrack,
       wagePolicy,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clubId, yearId, planSignings, planSales, planLoansOut, planLoansIn, revenueGrowth, europeBySeason, resolvedTrack, wagePolicy],
+    [clubId, yearId, planSignings, planSales, planLoansOut, planLoansIn, revenueGrowth, europeBySeason, positionBySeason, resolvedTrack, wagePolicy],
   );
 
   const plan = useMemo(() => projectPlan(forwardInputs), [forwardInputs]);
@@ -1217,25 +1246,70 @@ export default function Home() {
                 </div>
               </div>
 
-              <div>
-                <p className="text-xs uppercase tracking-wide text-neutral-500 mb-2">European competition per season <span className="normal-case text-neutral-600">(sets the 70% UEFA limit &amp; revenue)</span></p>
-                <div className="grid grid-cols-3 gap-2">
-                  {plan.seasons.map((s) => (
-                    <button
-                      key={s.seasonIndex}
-                      onClick={() => cycleEuropeTier(s.seasonIndex)}
-                      className={`rounded-md border px-2 py-1.5 text-center text-[10px] transition ${TIER_PILL[europeBySeason[s.seasonIndex] ?? "NONE"].cls}`}
-                      title={`Click to cycle European competition for ${s.label}.`}
-                    >
-                      <span className="block text-neutral-500 mb-0.5">{s.label.slice(2)}</span>
-                      {TIER_PILL[europeBySeason[s.seasonIndex] ?? "NONE"].label}
-                      {s.europeRevenueDelta !== 0 && (
-                        <span className="ml-1 opacity-80">{s.europeRevenueDelta > 0 ? "+" : "−"}£{Math.abs(s.europeRevenueDelta)}m</span>
-                      )}
-                    </button>
-                  ))}
+              {club.league === "EPL" ? (
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-neutral-500 mb-2">League finish per season <span className="normal-case text-neutral-600">(sets prize money &amp; the European tier)</span></p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {plan.seasons.map((s) => {
+                      const pos = positionBySeason[s.seasonIndex];
+                      const tier: EuropeTier = pos != null ? positionToEuropeTier(pos) : europeBySeason[s.seasonIndex] ?? "NONE";
+                      const delta = s.europeRevenueDelta + s.positionRevenueDelta;
+                      return (
+                        <div
+                          key={s.seasonIndex}
+                          className={`rounded-md border px-2 py-1.5 text-center text-[10px] ${TIER_PILL[tier].cls}`}
+                          title={`Projected final league position for ${s.label}. Top 4 ⇒ Champions League, 5–7 ⇒ Europa/Conference.`}
+                        >
+                          <span className="block text-neutral-500 mb-0.5">{s.label.slice(2)}</span>
+                          <select
+                            value={pos ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value === "" ? null : Number(e.target.value);
+                              setPositionBySeason((xs) => xs.map((x, i) => (i === s.seasonIndex ? v : x)));
+                            }}
+                            className="w-full cursor-pointer bg-transparent text-center text-[11px] font-medium outline-none [&>option]:bg-neutral-900"
+                          >
+                            <option value="">—</option>
+                            {Array.from({ length: 20 }, (_, i) => i + 1).map((p) => (
+                              <option key={p} value={p}>{ordinal(p)}</option>
+                            ))}
+                          </select>
+                          <span className="block mt-0.5">
+                            {TIER_PILL[tier].label}
+                            {delta !== 0 && (
+                              <span className="ml-1 opacity-80">{delta > 0 ? "+" : "−"}£{Math.abs(Math.round(delta))}m</span>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-neutral-600 mt-1">
+                    Finish adjusts PL merit money (£2.7m/place) + estimated facility fees vs the base year&apos;s{" "}
+                    {year.leaguePosition != null ? `${ordinal(year.leaguePosition)}-place finish` : "finish"}; the European tier follows the position.
+                  </p>
                 </div>
-              </div>
+              ) : (
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-neutral-500 mb-2">European competition per season <span className="normal-case text-neutral-600">(sets the 70% UEFA limit &amp; revenue)</span></p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {plan.seasons.map((s) => (
+                      <button
+                        key={s.seasonIndex}
+                        onClick={() => cycleEuropeTier(s.seasonIndex)}
+                        className={`rounded-md border px-2 py-1.5 text-center text-[10px] transition ${TIER_PILL[europeBySeason[s.seasonIndex] ?? "NONE"].cls}`}
+                        title={`Click to cycle European competition for ${s.label}.`}
+                      >
+                        <span className="block text-neutral-500 mb-0.5">{s.label.slice(2)}</span>
+                        {TIER_PILL[europeBySeason[s.seasonIndex] ?? "NONE"].label}
+                        {s.europeRevenueDelta !== 0 && (
+                          <span className="ml-1 opacity-80">{s.europeRevenueDelta > 0 ? "+" : "−"}£{Math.abs(s.europeRevenueDelta)}m</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {club.years.length > 1 && (
                 <div className="flex items-center gap-2">

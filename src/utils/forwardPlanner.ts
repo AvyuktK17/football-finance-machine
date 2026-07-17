@@ -117,6 +117,72 @@ export function tierInEurope(t: EuropeTier): boolean {
   return t !== "NONE";
 }
 
+// ---------------------------------------------------------------------------
+// Premier League finishing position → central payments (EPL only)
+// ---------------------------------------------------------------------------
+
+/**
+ * £m of PL central payments gained per league place, 2024/25 distribution:
+ * £1.617m UK merit + £1.038m international merit per place.
+ * Source: premierleague.com, "Premier League central payments to clubs
+ * 2024/25" (1 Jul 2025) — champions earned £53.1m total merit, 20th £2.6m.
+ */
+export const PL_MERIT_PER_PLACE = 2.655;
+
+/** Merit payment (£m) for a finishing position: (21 − pos) shares. */
+export function plMeritPayment(position: number): number {
+  const p = clampPosition(position);
+  return (21 - p) * PL_MERIT_PER_PLACE;
+}
+
+/**
+ * ESTIMATED facility fees (£m) by finishing position (index 0 = champions).
+ * Facility fees are really paid per UK-televised match (£1.615m each,
+ * 2024/25), not by position — TV picks correlate with the table but not
+ * perfectly (e.g. 15th-placed Man Utd out-earned mid-table clubs). This is a
+ * monotone curve calibrated to the published 2024/25 range: most-shown club
+ * £24.9m (30 matches), least-shown £8.9m (10-match minimum). Flagged
+ * estimate — tune freely.
+ */
+export const PL_FACILITY_BY_POSITION: readonly number[] = [
+  24.9, 23.4, 21.9, 20.4, 18.9, 17.5, 16.3, 15.2, 14.3, 13.5,
+  12.9, 12.3, 11.8, 11.3, 10.9, 10.5, 10.1, 9.7, 9.3, 8.9,
+];
+
+function clampPosition(position: number): number {
+  return Math.max(1, Math.min(20, Math.round(position)));
+}
+
+/** Total ESTIMATED position-dependent PL central payments (£m): merit + facility. */
+export function plPositionRevenue(position: number): number {
+  const p = clampPosition(position);
+  return plMeritPayment(p) + PL_FACILITY_BY_POSITION[p - 1];
+}
+
+/**
+ * Revenue delta (£m) of finishing `position` vs the base season's
+ * `basePosition`. Applied on top of revenue growth, mirroring the Europe-tier
+ * delta, so the base year's own prize money is never double-counted.
+ * Sanity check: 1st vs 20th ⇒ ≈ £66.5m — matches the real 2024/25 gap
+ * between Liverpool (£174.9m) and Southampton (£109.2m) of £65.7m.
+ */
+export function plPositionRevenueDelta(position: number, basePosition: number): number {
+  return plPositionRevenue(position) - plPositionRevenue(basePosition);
+}
+
+/**
+ * League position → UEFA tier via PL qualification (hard-linked by design):
+ * 1–4 ⇒ Champions League, 5–7 ⇒ Europa/Conference, 8+ ⇒ no Europe.
+ * England's 5th UCL spot (coefficient) and cup/UEL-winner routes are NOT
+ * modelled — the position determines the tier.
+ */
+export function positionToEuropeTier(position: number): EuropeTier {
+  const p = clampPosition(position);
+  if (p <= 4) return "UCL";
+  if (p <= 7) return "UEL_UECL";
+  return "NONE";
+}
+
 /** Coerce legacy boolean flags (old share links / saves) into tiers. */
 export function normalizeEuropeTier(v: unknown): EuropeTier {
   if (v === "UCL" || v === "UEL_UECL" || v === "NONE") return v;
@@ -260,6 +326,20 @@ export interface ForwardInputs {
   /** Per-season European participation tier (any UEFA tier ⇒ 70% limit). */
   europeBySeason: EuropeTier[];
   /**
+   * Projected final league position (1–20) per season — EPL clubs only.
+   * When set for a season it (a) adds the merit + facility-fee revenue delta
+   * vs `baseLeaguePosition`, and (b) OVERRIDES europeBySeason for that season
+   * via positionToEuropeTier (1–4 ⇒ UCL, 5–7 ⇒ UEL/UECL). null/undefined ⇒
+   * legacy behaviour for that season.
+   */
+  leaguePositionBySeason?: (number | null | undefined)[];
+  /**
+   * The finishing position the BASE year's revenue already reflects — the
+   * anchor for the position delta. Without it, positions still drive the
+   * Europe tier but add no prize-money delta.
+   */
+  baseLeaguePosition?: number | null;
+  /**
    * Which tier the BASE year's revenue already includes. Season revenue is
    * adjusted by EUROPE_TIER_REVENUE[season tier] − EUROPE_TIER_REVENUE[base
    * tier], so the base year is never double-counted. Default "NONE".
@@ -286,6 +366,10 @@ export interface SeasonProjection {
   europeTier: EuropeTier;
   /** £m revenue adjustment applied for the tier (vs the base year's tier) */
   europeRevenueDelta: number;
+  /** Assumed final league position (EPL only; null = not using positions) */
+  leaguePosition: number | null;
+  /** £m merit + facility revenue adjustment vs the base year's position */
+  positionRevenueDelta: number;
   /** £m of base amortisation that has rolled off by this season */
   amortisationRolledOff: number;
   /** £m trading profit booked this season from planned sales (incl. loan buys) */
@@ -520,12 +604,23 @@ export function projectPlan(inputs: ForwardInputs): ForwardPlan {
       }
     }
 
+    // League position (EPL): when set, the position drives the Europe tier
+    // (hard-linked: 1–4 UCL, 5–7 UEL/UECL) and adds a merit + facility-fee
+    // delta vs the base year's own finish.
+    const leaguePosition = inputs.leaguePositionBySeason?.[s] ?? null;
+    const basePosition = inputs.baseLeaguePosition ?? null;
     const tier: EuropeTier =
-      europeBySeason[s] ?? (base.isPlayingInEurope ? baseTier : "NONE");
+      leaguePosition != null
+        ? positionToEuropeTier(leaguePosition)
+        : europeBySeason[s] ?? (base.isPlayingInEurope ? baseTier : "NONE");
     // Tier revenue is applied as a DELTA vs the base year's own tier, so a base
     // season that already includes European money is never double-counted.
     const europeRevenueDelta =
       EUROPE_TIER_REVENUE[tier] - EUROPE_TIER_REVENUE[baseTier];
+    const positionRevenueDelta =
+      leaguePosition != null && basePosition != null
+        ? plPositionRevenueDelta(leaguePosition, basePosition)
+        : 0;
 
     const state: ClubState = {
       // Loan fees received are football income (they land in the denominator,
@@ -533,6 +628,7 @@ export function projectPlan(inputs: ForwardInputs): ForwardPlan {
       estimatedRevenue:
         base.estimatedRevenue * Math.pow(1 + revenueGrowth, s) +
         europeRevenueDelta +
+        positionRevenueDelta +
         loanFeeIncome,
       annualWages: Math.max(0, wages),
       annualAmortisation: Math.max(0, amort),
@@ -553,6 +649,8 @@ export function projectPlan(inputs: ForwardInputs): ForwardPlan {
       result,
       europeTier: tier,
       europeRevenueDelta,
+      leaguePosition,
+      positionRevenueDelta,
       amortisationRolledOff: rolledOff,
       tradingProfit,
       loanFeeIncome,
@@ -713,6 +811,10 @@ export interface SharedScenario {
   wagePolicy?: WagePolicy;
   /** Tiers; legacy payloads may contain booleans — run through normalizeEuropeTier. */
   europeBySeason: readonly (EuropeTier | boolean)[];
+  /** Per-season projected league positions (EPL only); absent in legacy payloads. */
+  leaguePositionBySeason?: (number | null)[];
+  /** Base-year finishing position override; absent ⇒ club-data default. */
+  baseLeaguePosition?: number | null;
   signings: PlannedSigning[];
   sales: PlannedSale[];
   /** absent in legacy payloads — treat as [] */

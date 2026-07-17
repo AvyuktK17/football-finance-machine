@@ -14,6 +14,12 @@ import {
   windowFirstSeasonWeight,
   windowYearOffset,
   EUROPE_TIER_REVENUE,
+  PL_MERIT_PER_PLACE,
+  PL_FACILITY_BY_POSITION,
+  plMeritPayment,
+  plPositionRevenue,
+  plPositionRevenueDelta,
+  positionToEuropeTier,
   WINDOWS,
   type ForwardInputs,
   type SquadMember,
@@ -487,6 +493,61 @@ console.log("— wage policy (renew vs expire)");
     wagePolicy: "expire", europeBySeason: ["NONE", "NONE", "NONE"], signings: [], sales: [],
   });
   assert(decodeScenario(enc)?.wagePolicy === "expire", "wagePolicy survives share codec");
+}
+
+// ---------------------------------------------------------------------------
+console.log("— league position → PL prize money & Europe tier");
+{
+  // Merit maths pinned to the published 2024/25 distribution.
+  assert(approx(plMeritPayment(1), 20 * PL_MERIT_PER_PLACE), "champions get 20 merit shares (£53.1m)");
+  assert(approx(plMeritPayment(20), PL_MERIT_PER_PLACE), "20th gets 1 share (£2.6m)");
+  assert(PL_FACILITY_BY_POSITION.length === 20, "facility table covers 20 positions");
+  for (let p = 1; p < 20; p++) {
+    assert(plPositionRevenue(p) > plPositionRevenue(p + 1), `position revenue strictly decreasing at ${p}`);
+  }
+  // 1st vs 20th ≈ £66.5m — the real 24/25 Liverpool–Southampton gap was £65.7m.
+  const spread = plPositionRevenueDelta(1, 20);
+  assert(spread > 60 && spread < 72, "1st-vs-20th spread sane (~£66.5m)");
+  assert(approx(plPositionRevenueDelta(5, 5), 0), "same position ⇒ zero delta");
+
+  // Hard link: position determines the UEFA tier.
+  assert(positionToEuropeTier(1) === "UCL" && positionToEuropeTier(4) === "UCL", "1–4 ⇒ UCL");
+  assert(positionToEuropeTier(5) === "UEL_UECL" && positionToEuropeTier(7) === "UEL_UECL", "5–7 ⇒ UEL/UECL");
+  assert(positionToEuropeTier(8) === "NONE" && positionToEuropeTier(20) === "NONE", "8+ ⇒ no Europe");
+
+  // Projection: position delta lands in revenue; tier overrides europeBySeason.
+  const posPlan = projectPlan({
+    ...inputs,
+    europeBySeason: ["NONE", "NONE", "NONE"],
+    leaguePositionBySeason: [4, 10, null],
+    baseLeaguePosition: 10,
+  });
+  const d0 = plPositionRevenueDelta(4, 10);
+  assert(approx(posPlan.seasons[0].state.estimatedRevenue, 600 + EUROPE_TIER_REVENUE.UCL + d0), "s0: UCL delta + position delta in revenue");
+  assert(posPlan.seasons[0].europeTier === "UCL", "s0: 4th ⇒ UCL despite europeBySeason NONE");
+  assert(posPlan.seasons[0].state.isPlayingInEurope, "s0: position puts club in Europe");
+  assert(approx(posPlan.seasons[1].state.estimatedRevenue, 600), "s1: same finish as base ⇒ no delta");
+  assert(posPlan.seasons[1].europeTier === "NONE", "s1: 10th ⇒ no Europe");
+  assert(posPlan.seasons[2].leaguePosition === null && approx(posPlan.seasons[2].positionRevenueDelta, 0), "s2: null position ⇒ legacy behaviour");
+
+  // Without a base position, positions drive the tier but add no money.
+  const noAnchor = projectPlan({ ...inputs, leaguePositionBySeason: [1, 1, 1] });
+  assert(approx(noAnchor.seasons[0].positionRevenueDelta, 0), "no base position ⇒ no prize-money delta");
+  assert(noAnchor.seasons[0].europeTier === "UCL", "no base position ⇒ tier still follows position");
+
+  // Codec: positions roundtrip and stay optional for legacy payloads.
+  const encPos = encodeScenario({
+    clubId: "tottenham", yearId: "fy2425", track: "AUTO", revenueGrowth: 0.03,
+    europeBySeason: ["NONE", "NONE", "NONE"], signings: [], sales: [],
+    leaguePositionBySeason: [4, null, 17], baseLeaguePosition: 17,
+  });
+  const decPos = decodeScenario(encPos);
+  assert(JSON.stringify(decPos?.leaguePositionBySeason) === "[4,null,17]", "positions survive share codec");
+  const encLegacy = encodeScenario({
+    clubId: "tottenham", yearId: "fy2425", track: "AUTO", revenueGrowth: 0.03,
+    europeBySeason: ["NONE", "NONE", "NONE"], signings: [], sales: [],
+  });
+  assert(decodeScenario(encLegacy)?.leaguePositionBySeason === undefined, "legacy payloads stay position-free");
 }
 
 // ---------------------------------------------------------------------------

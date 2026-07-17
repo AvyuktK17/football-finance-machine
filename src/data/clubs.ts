@@ -55,6 +55,12 @@ export interface ClubYear {
   isPlayingInEurope: boolean;
   /** Which UEFA competition this year's revenue already reflects. */
   europeTier?: EuropeTier;
+  /**
+   * Final PREMIER LEAGUE position this fiscal year's revenue reflects (1–20).
+   * Anchors the position-based prize-money delta in the forward planner.
+   * Omit for non-EPL seasons (e.g. a promoted club's Championship year).
+   */
+  leaguePosition?: number;
 }
 
 /** The European tier a ClubYear's revenue already includes (safe default). */
@@ -143,6 +149,7 @@ const TOTTENHAM: Club = {
   years: [
     {
       id: "fy2425",
+      leaguePosition: 17,
       label: "FY2024/25 (audited)",
       status: "verified",
       isPlayingInEurope: true,
@@ -184,6 +191,7 @@ const TOTTENHAM: Club = {
     },
     {
       id: "fy2526e",
+      leaguePosition: 17,
       label: "FY2025/26 (estimate)",
       status: "estimate",
       isPlayingInEurope: true,
@@ -285,6 +293,7 @@ const CHELSEA: Club = {
   years: [
     {
       id: "fy2425",
+      leaguePosition: 4,
       label: "FY2024/25 (audited)",
       status: "verified",
       isPlayingInEurope: true,
@@ -327,6 +336,7 @@ const CHELSEA: Club = {
     },
     {
       id: "fy2526e",
+      leaguePosition: 10,
       label: "FY2025/26 (estimate)",
       status: "estimate",
       isPlayingInEurope: true,
@@ -417,6 +427,8 @@ function yr(o: {
   id: string; label: string; status: VerificationStatus; euro: boolean;
   /** UEFA competition the year's revenue reflects; defaults to UCL when euro. */
   tier?: EuropeTier;
+  /** Final PL position that season (omit for non-EPL seasons). */
+  pos?: number;
   rev: number; net: number; wages: number; amort: number; agent: number;
   priors?: number[];
   src: string; url?: string; agentSrc: string; agentUrl?: string;
@@ -427,6 +439,7 @@ function yr(o: {
   return {
     id: o.id, label: o.label, status: o.status, isPlayingInEurope: o.euro,
     europeTier: o.tier ?? (o.euro ? "UCL" : "NONE"),
+    leaguePosition: o.pos,
     priorNetTradingProfits: o.priors,
     revenue: s(o.rev, o.notes?.revenue),
     netPlayerTradingProfit: s(o.net, o.notes?.net),
@@ -453,12 +466,12 @@ const MAN_CITY: Club = {
     note: "No club discloses per-player wages or book values — inherently estimates. Fees are publicly reported; contract-end years are best estimates.",
   },
   years: [
-    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: true,
+    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: true, pos: 3,
       rev: 694, net: 95.2, wages: 408, amort: 170, agent: 52.1, priors: [139, 122],
       src: "Man City FY25 accounts, year ended 30 Jun 2025 (Swiss Ramble)", url: "https://swissramble.substack.com/p/manchester-city-finances-202425",
       agentSrc: "FA published intermediary fees, 2024/25 window (actual, period-matched to FY24/25)", agentUrl: FA_URL,
       notes: { revenue: "Broadcast £279m + commercial £340m + matchday £75m. Pre-tax loss £10m.", net: "Álvarez, Cancelo, Harwood-Bellis, Couto sales.", agent: "FA Feb–Feb window ≠ 30-Jun fiscal year; value is the actual 2024/25 window (period-matched)." } }),
-    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: true,
+    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: true, pos: 2,
       rev: 710, net: 55, wages: 415, amort: 175, agent: 37.4, priors: [95.2, 139],
       src: "Projection from FY25 base + Champions League participation", agentSrc: "FA 2025/26 (£37.4m)", agentUrl: FA_URL }),
   ],
@@ -514,12 +527,12 @@ const ARSENAL: Club = {
     note: "No club discloses per-player wages or book values — inherently estimates. Fees are publicly reported; contract-end years are best estimates.",
   },
   years: [
-    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: true,
+    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: true, pos: 2,
       rev: 691, net: 82, wages: 346.8, amort: 176.6, agent: 22.8, priors: [51, 11],
       src: "Arsenal FY25 official results, year ended 31 May 2025", url: "https://www.arsenal.com/news/financial-results-202425",
       agentSrc: "FA published intermediary fees, 2024/25 window (actual, period-matched to FY24/25)", agentUrl: FA_URL,
       notes: { revenue: "Record £691.0m (2024: £616.6m). Loss just £1.4m.", wages: "£346.8m (2024: £327.8m).", amort: "Amortisation + impairment £176.6m (incl. £15.2m impairment).", net: "£82m — Smith Rowe, Nketiah, Ramsdale.", agent: "FA Feb–Feb window ≠ 30-Jun fiscal year; value is the actual 2024/25 window (period-matched)." } }),
-    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: true,
+    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: true, pos: 1,
       rev: 730, net: 45, wages: 365, amort: 185, agent: 32.1, priors: [82, 51],
       src: "Projection from FY25 base + deep Champions League run", agentSrc: "FA 2025/26 (£32.1m)", agentUrl: FA_URL }),
   ],
@@ -569,12 +582,12 @@ const LIVERPOOL: Club = {
     note: "No club discloses per-player wages or book values — inherently estimates. Fees are publicly reported; contract-end years are best estimates.",
   },
   years: [
-    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: true,
+    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: true, pos: 1,
       rev: 703, net: 52, wages: 428, amort: 117, agent: 20.8, priors: [22, 34],
       src: "Liverpool FY25 accounts, year ended 31 May 2025 (Swiss Ramble)", url: "https://swissramble.substack.com/p/liverpool-finances-202425",
       agentSrc: "FA published intermediary fees, 2024/25 window (actual, period-matched to FY24/25)", agentUrl: FA_URL,
       notes: { revenue: "Record £703m after PL title + CL return. Pre-tax profit £15m.", wages: "£428m — club record (title bonuses).", amort: "Only £117m — modest despite title win.", net: "£52m from player sales.", agent: "FA Feb–Feb window ≠ 30-Jun fiscal year; value is the actual 2024/25 window (period-matched)." } }),
-    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: true,
+    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: true, pos: 5,
       rev: 720, net: 100, wages: 460, amort: 190, agent: 33.9, priors: [52, 22],
       src: "Projection: record summer-2025 spend (Wirtz, Isak, Ekitike) sharply raises wages & amortisation; big sales offset", agentSrc: "FA 2025/26 (£33.9m)", agentUrl: FA_URL,
       notes: { amort: "Jumps on £116m Wirtz + Isak + Ekitike etc.", net: "Elevated by major outgoings (Núñez, Díaz)." } }),
@@ -627,12 +640,12 @@ const MAN_UTD: Club = {
     note: "No club discloses per-player wages or book values — inherently estimates. Fees are publicly reported; contract-end years are best estimates.",
   },
   years: [
-    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: true, tier: "UEL_UECL", // Europa League 2024/25 (runners-up)
+    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: true, pos: 15, tier: "UEL_UECL", // Europa League 2024/25 (runners-up)
       rev: 666.5, net: 48.7, wages: 313, amort: 196, agent: 33.0, priors: [37],
       src: "Man Utd Plc FY25 results, year ended 30 Jun 2025", url: "https://www.si.com/soccer/man-utd-financial-accounts-key-takeaways-2024-25-report",
       agentSrc: "FA published intermediary fees, 2024/25 window (actual, period-matched to FY24/25)", agentUrl: FA_URL,
       notes: { revenue: "Record £666.5m. Pre-tax loss £39.7m.", wages: "£313m (down from £365m — no CL bonuses, leaner staff).", net: "£48.7m — best in 16 yrs; McTominay & Greenwood (academy pure profit).", agent: "FA Feb–Feb window ≠ 30-Jun fiscal year; value is the actual 2024/25 window (period-matched)." } }),
-    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false,
+    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false, pos: 3,
       rev: 620, net: 40, wages: 300, amort: 205, agent: 31.8,
       src: "Projection: NO European football in 25/26 cuts revenue; PL 85% becomes the binding limit", agentSrc: "FA 2025/26 (£31.8m)", agentUrl: FA_URL,
       notes: { revenue: "Down on loss of European matchday/prize income." } }),
@@ -683,12 +696,12 @@ const NEWCASTLE: Club = {
   league: "EPL",
   id: "newcastle", name: "Newcastle United", shortName: "Newcastle", defaultYearId: "fy2425",
   years: [
-    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
+    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false, pos: 5,
       rev: 335, net: 19.9, wages: 243, amort: 100, agent: 24.4,
       src: "Newcastle United FY25 accounts, year ended 30 Jun 2025 (Swiss Ramble analysis)", url: "https://swissramble.substack.com/p/newcastle-united-finances-202425",
       agentSrc: "FA published intermediary fees, 2024/25 window (actual, period-matched to FY24/25)", agentUrl: FA_URL,
       notes: { revenue: "Club-record £335m (2024: £320m): commercial +£37m to £123m, offsetting broadcasting −£23m to £161m after dropping out of the Champions League. £35m pre-tax profit flattered by a £133m gain on the sale of St James' Park to a group company — strip that out and the underlying loss was ~£98m.", net: "Profit on player sales fell £50m to £19.9m (Almirón, Lloyd Kelly).", wages: "Total wage bill £243m (wage/revenue 72.6%); football-only wages not separately disclosed.", amort: "Player amortisation £100m.", agent: "No European football in 2024/25 (out of Europe after the 2023/24 CL run). FA Feb–Feb window ≠ fiscal year; value is the actual 2024/25 window (period-matched)." } }),
-    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: true,
+    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: true, pos: 12,
       rev: 400, net: 35, wages: 262, amort: 112, agent: 20.3, priors: [19.9, 70],
       src: "Projection from FY25 base + return to the Champions League (5th in 2024/25)", agentSrc: "FA 2025/26 (£20.3m)", agentUrl: FA_URL }),
   ],
@@ -736,12 +749,12 @@ const ASTON_VILLA: Club = {
   league: "EPL",
   id: "aston-villa", name: "Aston Villa", shortName: "Aston Villa", defaultYearId: "fy2425",
   years: [
-    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: true,
+    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: true, pos: 6,
       rev: 378, net: 52, wages: 273, amort: 99, agent: 25.1, priors: [65, 39],
       src: "Aston Villa FY25 accounts, year ended 31 May 2025 (Swiss Ramble analysis)", url: "https://swissramble.substack.com/p/aston-villa-finances-202425",
       agentSrc: "FA published intermediary fees, 2024/25 window (actual, period-matched to FY24/25)", agentUrl: FA_URL,
       notes: { revenue: "Revenue up £102m to £378m on a first Champions League campaign. Headline £17m profit driven almost entirely by a £114m one-off gain from selling the women's team and Warehouse rights to a group company — underlying loss ~£97m.", net: "Profit on player sales £52m (down from £65m); Douglas Luiz to Juventus the marquee deal.", wages: "Football wages £273m; total staff cost £380m ≈ 100% of revenue — highest outside the big six.", amort: "Player amortisation £99m plus a £6.4m impairment charge.", agent: "In the Champions League in 2024/25. FA Feb–Feb window ≠ fiscal year; value is the actual 2024/25 window (period-matched)." } }),
-    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: true, tier: "UEL_UECL",
+    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: true, pos: 4, tier: "UEL_UECL",
       rev: 340, net: 55, wages: 275, amort: 100, agent: 38.4, priors: [52, 65],
       src: "Projection from FY25 base + Europa League (6th in 2024/25, dropped from the CL to the Europa League)", agentSrc: "FA 2025/26 (£38.4m)", agentUrl: FA_URL }),
   ],
@@ -793,12 +806,12 @@ const EVERTON: Club = {
   league: "EPL",
   id: "everton", name: "Everton", shortName: "Everton", defaultYearId: "fy2425",
   years: [
-    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
+    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false, pos: 13,
       rev: 196.7, net: 31.3, wages: 152.1, amort: 50.9, agent: 9.2,
       src: "Everton FY25 accounts, year ended 30 Jun 2025 (Swiss Ramble analysis)", url: "https://swissramble.substack.com/p/everton-finances-202425",
       agentSrc: "FA published intermediary fees, 2024/25 window (actual, period-matched to FY24/25)", agentUrl: FA_URL,
       notes: { revenue: "Club-record £196.7m (+£9.8m), led by commercial growth. Reduced loss of £8.6m (from £53.2m), though an internal asset sale flatters it — underlying operating loss ~£57.8m. Friedkin Group bought out Moshiri in Dec 2024.", net: "Profit on player trading £31.3m.", wages: "Wage bill fell £4.5m to £152.1m; wage/turnover improved to 74% after outsourcing retail & catering.", amort: "Player amortisation cut £13.7m to £50.9m.", agent: "No European football. FA Feb–Feb window ≠ fiscal year; value is the actual 2024/25 window (period-matched)." } }),
-    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false,
+    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false, pos: 13,
       rev: 230, net: 20, wages: 160, amort: 55, agent: 10.0,
       src: "Projection from FY25 base + first full season at the new Hill Dickinson Stadium (higher matchday)", agentSrc: "FA 2025/26 (£10.0m)", agentUrl: FA_URL }),
   ],
@@ -843,12 +856,12 @@ const BOURNEMOUTH: Club = {
   league: "EPL",
   id: "bournemouth", name: "AFC Bournemouth", shortName: "Bournemouth", defaultYearId: "fy2425",
   years: [
-    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
+    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false, pos: 9,
       rev: 182, net: 91, wages: 158, amort: 69, agent: 16.4,
       src: "AFC Bournemouth FY25 accounts, year ended 30 Jun 2025 (Swiss Ramble analysis)", url: "https://swissramble.substack.com/p/bournemouth-finances-202425",
       agentSrc: "FA published intermediary fees, 2024/25 window (actual, period-matched to FY24/25)", agentUrl: FA_URL,
       notes: { revenue: "Club-record £182m (+£21m). One of only two PL clubs in profit (~£15m underlying), a model entirely reliant on player trading.", net: "Profit on player sales soared from £0.3m to £91m (Solanke, Huijsen, Kerkez).", wages: "Wages £158m; total staff cost before player sales ~125% of revenue — likely the league's highest.", amort: "Player amortisation £69m after >£300m of squad investment.", agent: "No European football. FA Feb–Feb window ≠ fiscal year; value is the actual 2024/25 window (period-matched)." } }),
-    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false,
+    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false, pos: 6,
       rev: 190, net: 45, wages: 160, amort: 72, agent: 20.9,
       src: "Projection from FY25 base (9th in 2024/25, no European football)", agentSrc: "FA 2025/26 (£20.9m)", agentUrl: FA_URL }),
   ],
@@ -902,12 +915,12 @@ const BRIGHTON: Club = {
   league: "EPL",
   id: "brighton", name: "Brighton & Hove Albion", shortName: "Brighton", defaultYearId: "fy2425",
   years: [
-    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
+    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false, pos: 8,
       rev: 222, net: 57, wages: 165, amort: 82, agent: 16.6,
       src: "Brighton & Hove Albion FY25 accounts, year ended 30 Jun 2025 (Swiss Ramble analysis)", url: "https://swissramble.substack.com/p/brighton-and-hove-albion-finances-28d",
       agentSrc: "FA published intermediary fees, 2024/25 window (actual, period-matched to FY24/25)", agentUrl: FA_URL,
       notes: { revenue: "Revenue £222m, broadly flat: lost European income offset by a higher 8th-place finish and commercial growth to £43m. £56m loss.", net: "Profit on player sales £57m (down from £110m) — a ~£131m swing in profitability.", wages: "Wages up £19m to £165m after heavy recruitment (~£210m spent).", amort: "Player amortisation more than doubled, +£43m to £82m.", agent: "No European football in 2024/25. FA Feb–Feb window ≠ fiscal year; value is the actual 2024/25 window (period-matched)." } }),
-    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false,
+    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false, pos: 8,
       rev: 230, net: 80, wages: 170, amort: 90, agent: 19.5,
       src: "Projection from FY25 base (8th in 2024/25, no European football)", agentSrc: "FA 2025/26 (£19.5m)", agentUrl: FA_URL }),
   ],
@@ -968,12 +981,12 @@ const CRYSTAL_PALACE: Club = {
   league: "EPL",
   id: "crystal-palace", name: "Crystal Palace", shortName: "Crystal Palace", defaultYearId: "fy2425",
   years: [
-    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
+    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false, pos: 12,
       rev: 197, net: 66, wages: 148.3, amort: 54.1, agent: 12.0,
       src: "Crystal Palace FY25 accounts, year ended 30 Jun 2025 (Swiss Ramble analysis)", url: "https://swissramble.substack.com/p/crystal-palace-finances-202425",
       agentSrc: "FA published intermediary fees, 2024/25 window (actual, period-matched to FY24/25)", agentUrl: FA_URL,
       notes: { revenue: "Revenue £197m (+£6m). Net profit £5m — one of only four PL clubs in the black.", net: "Profit on player sales £66m (Olise, Andersen).", wages: "Wages up £14.6m to a record £148.3m.", amort: "Player amortisation up £8.1m to £54.1m.", agent: "No European football in 2024/25 (won the FA Cup in May 2025 → Europe in 2025/26). FA Feb–Feb window ≠ fiscal year; value is the actual 2024/25 window (period-matched)." } }),
-    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: true, tier: "UEL_UECL", // Conference League 2025/26 (demoted from UEL by UEFA multi-club ruling)
+    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: true, pos: 15, tier: "UEL_UECL", // Conference League 2025/26 (demoted from UEL by UEFA multi-club ruling)
       rev: 210, net: 45, wages: 155, amort: 58, agent: 16.8, priors: [66, 0.3],
       src: "Projection from FY25 base + European football (2025/26 UEFA competition following the 2024/25 FA Cup win)", agentSrc: "FA 2025/26 (£16.8m)", agentUrl: FA_URL }),
   ],
@@ -1025,12 +1038,12 @@ const BRENTFORD: Club = {
   league: "EPL",
   id: "brentford", name: "Brentford", shortName: "Brentford", defaultYearId: "fy2425",
   years: [
-    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
+    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false, pos: 10,
       rev: 173.1, net: 27.2, wages: 131, amort: 48, agent: 14.8,
       src: "Brentford FY25 accounts, year ended 30 Jun 2025 (Swiss Ramble analysis)", url: "https://swissramble.substack.com/p/brentford-finances-202425",
       agentSrc: "FA published intermediary fees, 2024/25 window (actual, period-matched to FY24/25)", agentUrl: FA_URL,
       notes: { revenue: "Club-record £173.1m (+£6.6m) on a 10th-place finish. Pre-tax loss widened to £20.5m.", net: "Profit on player sales £27.2m (Toney to Al-Ahli). Excludes the summer-2025 Mbeumo/Wissa/Nørgaard sales, which land in FY2025/26.", wages: "Wages up £17m to £131m.", amort: "Player amortisation up to £48m.", agent: "No European football. FA Feb–Feb window ≠ fiscal year; value is the actual 2024/25 window (period-matched)." } }),
-    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false,
+    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false, pos: 9,
       rev: 180, net: 100, wages: 130, amort: 50, agent: 12.7,
       src: "Projection: FY25 base + a large player-trading profit from the Mbeumo & Wissa sales (~£110m proceeds vs ~£16m book cost)", agentSrc: "FA 2025/26 (£12.7m)", agentUrl: FA_URL }),
   ],
@@ -1082,11 +1095,11 @@ const NOTTINGHAM_FOREST: Club = {
   league: "EPL",
   id: "nottingham-forest", name: "Nottingham Forest", shortName: "Nott'm Forest", defaultYearId: "fy2425",
   years: [
-    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
+    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false, pos: 7,
       rev: 221.7, net: 7, wages: 167, amort: 68.9, agent: 18.5, priors: [100.5, 20],
       src: "Nottingham Forest FY25 accounts, year ended 30 Jun 2025 (Swiss Ramble analysis)", agentSrc: "FA published intermediary fees, 2024/25 window (actual, period-matched to FY24/25)", agentUrl: FA_URL,
       notes: { revenue: "Record revenue of £221.7m (+17%) following commercial and broadcast growth. Operating pre-tax loss of £78.9m.", net: "Profit on disposal of player registrations fell to £7m (down from £100.5m).", wages: "Total staff wage costs was £167m, representing 75% of revenue.", amort: "Player amortisation rose to £68.9m due to high historical acquisitions." } }),
-    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false,
+    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false, pos: 16,
       rev: 225, net: 35, wages: 170, amort: 72, agent: 15.2, priors: [7, 100.5],
       src: "Projection: FY25 base + estimated player sales profit", agentSrc: "FA 2025/26 (£15.2m)", agentUrl: FA_URL }),
   ],
@@ -1135,11 +1148,11 @@ const FULHAM: Club = {
   league: "EPL",
   id: "fulham", name: "Fulham", shortName: "Fulham", defaultYearId: "fy2425",
   years: [
-    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false,
+    yr({ id: "fy2425", label: "FY2024/25 (audited)", status: "verified", euro: false, pos: 11,
       rev: 194.8, net: 41, wages: 167, amort: 58, agent: 14.2, priors: [25, 20],
       src: "Fulham FY25 accounts, year ended 30 Jun 2025 (Swiss Ramble analysis)", agentSrc: "FA published intermediary fees, 2024/25 window (actual, period-matched to FY24/25)", agentUrl: FA_URL,
       notes: { revenue: "Record revenue of £194.8m driven by improved 11th-place league finish and new Riverside Stand opening.", net: "Profit on player sales £41m, driven by Palhinha and Stansfield.", wages: "Total staff wage costs of £167m representing high operational commitment.", amort: "Player amortisation estimated at £58m." } }),
-    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false,
+    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false, pos: 11,
       rev: 197, net: 30, wages: 170, amort: 62, agent: 12.4, priors: [41, 25],
       src: "Projection: FY25 base + moderate trading profit", agentSrc: "FA 2025/26 (£12.4m)", agentUrl: FA_URL }),
   ],
@@ -1191,7 +1204,7 @@ const LEEDS: Club = {
       rev: 137, net: 75, wages: 103, amort: 30, agent: 9.5, priors: [15, 10],
       src: "Leeds United FY25 accounts, Championship season (Kieran Maguire analysis)", agentSrc: "FA published intermediary fees, 2024/25 window (actual, period-matched to FY24/25)", agentUrl: FA_URL,
       notes: { revenue: "Championship record revenue of £137m backed by high commercial and matchday metrics. Operating loss at £49.1m.", net: "Profit on player sales of £75m from Summerville, Gray, and Rutter departures.", wages: "Total staff wage cost was £103m, among the highest in Championship history.", amort: "Player amortisation estimated at £30m." } }),
-    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false,
+    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false, pos: 14,
       rev: 145, net: 30, wages: 110, amort: 35, agent: 11.2, priors: [75, 15],
       src: "Projection: Championship promotion campaign & high trading profits", agentSrc: "FA 2025/26 (£11.2m)", agentUrl: FA_URL }),
   ],
@@ -1243,7 +1256,7 @@ const SUNDERLAND: Club = {
       rev: 40.3, net: 45.8, wages: 52.9, amort: 5, agent: 4.8, priors: [5, 3],
       src: "Sunderland AFC FY25 accounts, Championship season (audited analysis)", agentSrc: "FA published intermediary fees, 2024/25 window (actual, period-matched to FY24/25)", agentUrl: FA_URL,
       notes: { revenue: "Championship turnover rose to £40.3m. Narrowed pre-tax loss to £0.3m due to player sales.", net: "Profit on player sales reached £45.8m, primarily Jack Clarke's transfer.", wages: "Staff costs rose significantly to £52.9m.", amort: "Player amortisation was £5m." } }),
-    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false,
+    yr({ id: "fy2526e", label: "FY2025/26 (estimate)", status: "estimate", euro: false, pos: 7,
       rev: 95, net: 10, wages: 75, amort: 15, agent: 6.2, priors: [45.8, 5],
       src: "Projection: Championship promotion run & squad developments", agentSrc: "FA 2025/26 (£6.2m)", agentUrl: FA_URL }),
   ],
