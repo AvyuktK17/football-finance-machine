@@ -305,10 +305,21 @@ export interface SquadMember {
 
 export interface PlannedSale {
   window: WindowId;
-  /** must match a SquadMember name */
+  /**
+   * Name of the departing player. Normally matches a SquadMember; when it does
+   * NOT (an academy/youth sale added by name), the fee books as pure profit —
+   * see `isAcademy`.
+   */
   name: string;
   /** £m */
   saleFee: number;
+  /**
+   * Pure-profit sale of a player not carried in the squad database (academy /
+   * youth). The whole fee books as trading profit (£0 book value) and there is
+   * no wage or amortisation to shed. Sales whose name doesn't match a squad
+   * member are treated this way regardless of the flag.
+   */
+  isAcademy?: boolean;
 }
 
 export interface ForwardInputs {
@@ -549,6 +560,15 @@ export function projectPlan(inputs: ForwardInputs): ForwardPlan {
           }
         }
       }
+    }
+
+    // --- Academy / off-book sales: a player sold by name who isn't carried in
+    //     the squad database. There's no book value, wage, or amortisation to
+    //     touch, so the entire fee books as pure trading profit in the season
+    //     its window lands. (Squad-member sales are handled in the loop above.)
+    for (const sale of sales) {
+      if (squadByName.has(sale.name)) continue;
+      if (windowSeason(sale.window) === s) tradingProfit += sale.saleFee;
     }
 
     // --- New signings.

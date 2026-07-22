@@ -185,6 +185,30 @@ console.log("— sales");
   assert(approx(plan.seasons[0].tradingProfit, 25), "academy sale is pure profit");
 }
 {
+  // Sell-by-name: a youth/academy player who ISN'T in the squad database.
+  // The whole fee books as pure profit, in the sale window's season, and
+  // touches no wages or amortisation.
+  const baseline = projectPlan({ ...inputs });
+  const plan = projectPlan({
+    ...inputs,
+    sales: [{ window: "W3", name: "Youth Prospect", saleFee: 18, isAcademy: true }],
+  });
+  assert(approx(plan.seasons[1].tradingProfit, 18), "off-book sale books pure profit in its season");
+  assert(approx(plan.seasons[0].tradingProfit, 0), "off-book sale doesn't book in the wrong season");
+  // Sheds no wages or amortisation — everything but trading profit matches the no-sale baseline.
+  assert(approx(plan.seasons[1].state.annualWages, baseline.seasons[1].state.annualWages), "off-book sale sheds no wages");
+  assert(approx(plan.seasons[1].state.annualAmortisation, baseline.seasons[1].state.annualAmortisation), "off-book sale changes no amortisation");
+}
+{
+  // An off-book sale is booked even without the isAcademy flag, purely because
+  // the name doesn't match any squad member.
+  const plan = projectPlan({
+    ...inputs,
+    sales: [{ window: "W1", name: "Unlisted Kid", saleFee: 9 }],
+  });
+  assert(approx(plan.seasons[0].tradingProfit, 9), "unmatched sale name → pure profit");
+}
+{
   // January sale: half-season wage relief, half-year extra amortisation charged.
   const plan = projectPlan({
     ...inputs,

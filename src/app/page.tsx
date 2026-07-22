@@ -158,6 +158,8 @@ interface SaleRow {
   name: string;
   window: WindowId;
   saleFee: number;
+  /** Sold by name — a youth/academy player not in the squad. Pure-profit sale. */
+  isAcademy?: boolean;
 }
 type BuyType = "none" | "option" | "obligation";
 interface LoanOutRow {
@@ -214,6 +216,9 @@ export default function Home() {
   const [track, setTrack] = useState<RegulatoryTrack | "AUTO">("AUTO");
   const [incomings, setIncomings] = useState<IncomingRow[]>([]);
   const [sales, setSales] = useState<SaleRow[]>([]);
+  // "Sell by name" draft — an academy/youth player who isn't in the squad list.
+  const [academyName, setAcademyName] = useState("");
+  const [academyFee, setAcademyFee] = useState(10);
   const [loansOut, setLoansOut] = useState<LoanOutRow[]>([]);
   const [loansIn, setLoansIn] = useState<LoanInRow[]>([]);
   const [lineup, setLineup] = useState<Lineup | null>(null);
@@ -364,7 +369,7 @@ export default function Home() {
         label: g.label ?? `Signing ${i + 1}`,
       })),
     );
-    setSales((s.sales ?? []).filter((x) => names.has(x.name)).map((x) => ({ name: x.name, window: x.window, saleFee: x.saleFee })));
+    setSales((s.sales ?? []).filter((x) => names.has(x.name) || x.isAcademy).map((x) => ({ name: x.name, window: x.window, saleFee: x.saleFee, isAcademy: x.isAcademy })));
     setLoansOut(
       (s.loansOut ?? []).filter((l) => names.has(l.name)).map((l) => ({
         name: l.name, window: l.window, loanFee: l.loanFee,
@@ -404,7 +409,7 @@ export default function Home() {
       signings: incomings.map(({ window: w, fee, weeklyWage, contractLength, isFree, marketValue, position, label }) => ({
         window: w, fee, weeklyWage, contractLength, isFree, marketValue, position, label,
       })),
-      sales: sales.map(({ window: w, name, saleFee }) => ({ window: w, name, saleFee })),
+      sales: sales.map(({ window: w, name, saleFee, isAcademy }) => ({ window: w, name, saleFee, isAcademy })),
       loansOut: loansOut.map((l) => ({
         window: l.window, name: l.name, loanFee: l.loanFee,
         wageCoveredPct: l.wageCoveredPct, lengthSeasons: l.lengthSeasons,
@@ -466,7 +471,7 @@ export default function Home() {
     [incomings],
   );
   const planSales: PlannedSale[] = useMemo(
-    () => sales.map((s) => ({ window: s.window, name: s.name, saleFee: s.saleFee })),
+    () => sales.map((s) => ({ window: s.window, name: s.name, saleFee: s.saleFee, isAcademy: s.isAcademy })),
     [sales],
   );
   const planLoansOut: LoanOut[] = useMemo(
@@ -621,6 +626,20 @@ export default function Home() {
   }
   function updateSale(name: string, patch: Partial<SaleRow>) {
     setSales((xs) => xs.map((s) => (s.name === name ? { ...s, ...patch } : s)));
+  }
+  function removeSaleByName(name: string) {
+    setSales((xs) => xs.filter((s) => s.name !== name));
+  }
+  // Sell a youth/academy player who isn't in the squad DB — books into the
+  // active window as a pure-profit sale (£0 book value).
+  function addAcademySale() {
+    const name = academyName.trim();
+    if (!name) return;
+    // Don't shadow an existing squad player or a sale already on the sheet.
+    if (club.players.some((p) => p.name === name) || sales.some((s) => s.name === name)) return;
+    setSales((xs) => [...xs, { name, window: activeWindow, saleFee: Math.max(0, academyFee), isAcademy: true }]);
+    setAcademyName("");
+    setAcademyFee(10);
   }
   function toggleLoanOut(p: Player) {
     setSales((xs) => xs.filter((s) => s.name !== p.name)); // loan replaces a sale
@@ -1402,36 +1421,61 @@ export default function Home() {
 
             {/* Sales */}
             <CollapsibleCard collapsible={isMobile} count={sales.length} title="Sales">
-              {sales.length === 0 ? (
-                <p className="text-xs text-neutral-600">Open the squad below and hit “Sell” on any player → it lands in the active window.</p>
-              ) : (
+              {sales.length === 0 && (
+                <p className="text-xs text-neutral-600">Open the squad below and hit “Sell” on any player, or add an academy/youth player by name below → it lands in the active window.</p>
+              )}
+              {sales.length > 0 && (
                 <div className="space-y-2">
                   {sales.map((s) => {
-                    const p = club.players.find((pl) => pl.name === s.name)!;
+                    const p = club.players.find((pl) => pl.name === s.name);
+                    // Academy / off-book sale (added by name): no squad record, so
+                    // it's a pure-profit disposal with £0 book value.
+                    const isAcademySale = !p || s.isAcademy;
                     const yearsAfter = windowYearOffset(s.window);
-                    const bv = p.isAcademy ? 0 : Math.max(0, bookValueAt(p, asOf) - (p.fee > 0 ? (p.fee / Math.max(1, p.contractEndYear - p.signedYear)) * yearsAfter : 0));
+                    const bv = !p || p.isAcademy
+                      ? 0
+                      : Math.max(0, bookValueAt(p, asOf) - (p.fee > 0 ? (p.fee / Math.max(1, p.contractEndYear - p.signedYear)) * yearsAfter : 0));
                     const profit = s.saleFee - bv;
-                    const overMarket = p.marketValue > 0 && s.saleFee > 2 * p.marketValue;
+                    const overMarket = !!p && p.marketValue > 0 && s.saleFee > 2 * p.marketValue;
                     return (
                       <div key={s.name} className="bg-neutral-900 rounded px-2 py-1.5 border border-neutral-800">
                         <div className="flex items-center gap-2 text-xs">
                           <select value={s.window} onChange={(e) => updateSale(s.name, { window: e.target.value as WindowId })} className={`border rounded text-[10px] px-1 py-0.5 ${WINDOW_BADGE[s.window]} bg-transparent`}>
                             {WINDOWS.map((w) => <option key={w.id} value={w.id} className="bg-neutral-900 text-neutral-200">{w.short}</option>)}
                           </select>
-                          <span className="text-neutral-300 flex-1 truncate">{s.name}</span>
-                          <span className="text-[10px] text-neutral-600 tabular-nums shrink-0" title="Transfermarkt-style market value estimate">mkt £{p.marketValue}m</span>
+                          <span className="text-neutral-300 flex-1 truncate">{s.name}{isAcademySale && <span className="text-emerald-500 ml-1.5">academy</span>}</span>
+                          {isAcademySale ? (
+                            <span className="text-[10px] text-emerald-500/70 tabular-nums shrink-0" title="Homegrown/academy sale — the whole fee is pure profit">pure profit</span>
+                          ) : (
+                            <span className="text-[10px] text-neutral-600 tabular-nums shrink-0" title="Transfermarkt-style market value estimate">mkt £{p!.marketValue}m</span>
+                          )}
                           <MoneyInput value={s.saleFee} onChange={(v) => updateSale(s.name, { saleFee: v })} warn={overMarket} />
                           <span className={profit >= 0 ? "text-emerald-400 w-16 text-right tabular-nums" : "text-red-400 w-16 text-right tabular-nums"}>{profit >= 0 ? "+" : ""}£{profit.toFixed(0)}m</span>
-                          <button onClick={() => toggleSale(p)} className="text-red-400 hover:text-red-300">✕</button>
+                          <button onClick={() => removeSaleByName(s.name)} className="text-red-400 hover:text-red-300">✕</button>
                         </div>
                         {overMarket && (
-                          <p className="mt-1 text-[10px] text-amber-400">Well above his £{p.marketValue}m market value — buyers rarely pay 2×. Keep it only to model a bidding war.</p>
+                          <p className="mt-1 text-[10px] text-amber-400">Well above his £{p!.marketValue}m market value — buyers rarely pay 2×. Keep it only to model a bidding war.</p>
                         )}
                       </div>
                     );
                   })}
                 </div>
               )}
+              {/* Sell an academy/youth player who isn't in the squad list. */}
+              <div className="mt-3 pt-3 border-t border-neutral-800">
+                <p className="text-[11px] text-neutral-500 mb-1.5">Sell an academy / youth player not in the squad — books into <span className={`px-1 rounded border ${WINDOW_BADGE[activeWindow]}`}>{activeWindowLabel}</span> as pure profit.</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={academyName}
+                    onChange={(e) => setAcademyName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") addAcademySale(); }}
+                    placeholder="Player name"
+                    className="flex-1 min-w-0 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200 placeholder:text-neutral-600"
+                  />
+                  <span className="flex items-center gap-1 text-xs text-neutral-500 shrink-0">Fee <MoneyInput value={academyFee} onChange={setAcademyFee} /></span>
+                  <button onClick={addAcademySale} disabled={!academyName.trim()} className="shrink-0 text-xs rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 px-2.5 py-1 text-white">+ Sell</button>
+                </div>
+              </div>
             </CollapsibleCard>
 
             {/* Loans out */}
